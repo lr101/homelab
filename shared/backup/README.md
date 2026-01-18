@@ -11,12 +11,9 @@ When adding a new device the following steps need to be taken:
 3. Create a `.env` file in this directory, containing the path to the new location. For example:
 ```conf
 # Needed for autorestic
-DEVICE_FOLDER_PATH=/home/lr/homelab_templates/thinkpad # Path to the .autorestic.yml folder
-LOCAL_BACKUP_PATH=/home/lr/.backup                     # Local backup location
-
-# (Optional) Needed for restic metric exporter
-DEVICE=thinkpad                                        # The device it is running on -> Constructs the domain
-AUTORESTIC_LOCAL_RESTIC_PASSWORD=<SECRET_KEY>          # Will be created in step 5
+DEVICE_FOLDER_PATH=/home/lr/homelab_templates/thinkpad # Path to the .autorestic.yml folder and backup location
+SHARED_FOLDER_PATH=/home/lr/homelab_templates/shared   # (Optional) Path to the shared folder
+LOCAL_BACKUP_PATH=/home/lr/.backup                     # (Optional) Local backup location
 ```
 4. Add the backend configurations. This depends on your setup:
 
@@ -56,18 +53,18 @@ AUTORESTIC_LOCAL_RESTIC_PASSWORD=<SECRET_KEY>          # Will be created in step
 
 5. Run 
 ```sh
-sudo docker compose run --rm autorestic autorestic -c /data/.autorestic.yml check
+sudo docker compose run --rm autorestic autorestic check
 ```
-This will check if your configuration is configured correctly, initializes the backends and generates the encryption keys. To commit the `.autorestic.yml` file to git, make sure to copy the generated keys into a `.autorestic.env` file next to it. Remomve the keys from the config and name the entries with the schema: `AUTORESTIC_<backend>_RESTIC_PASSWORD=...`.
-Also copy this value into the `./shared/backup/.env` file if you want to use the restic exporter. 
+This will check if your configuration is configured correctly, initializes the backends and generates the encryption keys. To commit the `.autorestic.yml` file to git, make sure to copy the generated keys into a `.autorestic.env` file next to it. Remove the keys from the config and name the entries with the schema: `AUTORESTIC_<backend>_RESTIC_PASSWORD=...`.
 
-6. Startup: `sudo docker compose up -d`
+
+1. Startup: `sudo docker compose up -d`
 
 ## Setup Hooks
 
 The [hooks](./hooks/) contains useful scripts that are currently used by autorestic for backup purposes.
 
-To use the [influx-hook.py](./influx-hook.py) script, a `.env` file needs to be created at [hooks/.env](./hooks/.env) with the following values:
+**Legacy - this was replaced by direct influx metric support**: To use the [influx-hook.py](./influx-hook.py) script, a `.env` file needs to be created at [hooks/.env](./hooks/.env) with the following values:
 
 ```env
 INFLUXDB_URL=https://influx.medion.lr-projects.de
@@ -75,6 +72,68 @@ INFLUXDB_TOKEN=<token>
 INFLUXDB_BUCKET=restic_backup
 INFLUXDB_ORG=lr-projects
 ```
+
+## Setup Influx Backup Metrics
+
+To push metrics about the backups to influx, the following needs to be configured:
+
+```yml
+monitors:
+  <monitor_name>:
+    type: influx
+
+locations:
+  docker-tags:
+    from:
+    - <path>
+    to:
+    - <backend>
+    monitors:
+    - <monitor_name>
+
+```
+
+as well as adding the influx auth to `.autorestic.env`
+
+```
+AUTORESTIC_<monitor_name>_INFLUX_URL=
+AUTORESTIC_<monitor_name>_INFLUX_TOKEN=
+AUTORESTIC_<monitor_name>_INFLUX_ORG=
+AUTORESTIC_<monitor_name>_INFLUX_BUCKET=
+AUTORESTIC_<monitor_name>_SERVER_TAG=
+```
+
+The following information will be pushed to influx for every location **AND** backend that are configured in *to*:
+
+The provided data:
+
+| Metric Field           | Meaning                                         | Unit / Type | Notes                                     |
+| ---------------------- | ----------------------------------------------- | ----------- | ----------------------------------------- |
+| `added_size_bytes`     | Total size of newly added data in this snapshot | Bytes       | Useful for measuring daily backup growth  |
+| `dirs_added`           | Number of new directories added                 | Count       | Indicates structural filesystem changes   |
+| `dirs_changed`         | Number of directories that changed              | Count       | Shows churn in directory structure        |
+| `dirs_unmodified`      | Number of directories unchanged                 | Count       | Helps calculate percentage of stable data |
+| `duration_seconds`     | How long the restic backup ran                  | Seconds     | Primary performance metric                |
+| `files_added`          | Number of new files added                       | Count       | Indicates new content created             |
+| `files_changed`        | Number of files modified since last snapshot    | Count       | High values indicate active workloads     |
+| `files_unmodified`     | Number of files unchanged                       | Count       | Helps estimate deduplication efficiency   |
+| `processed_files`      | Total number of files scanned                   | Count       | Includes added + changed + unmodified     |
+| `processed_size_bytes` | Total data size scanned during backup           | Bytes       | Represents the workload restic analyzed   |
+
+
+
+The provided tags:
+
+| Column         | Meaning                                | Example                                   |
+| -------------- | -------------------------------------- | ----------------------------------------- |
+| `backend`      | Your defined backend name              | `local`                                   |
+| `exit_code`    | Exit code from restic run              | `0` = success, non-zero = error           |
+| `location`     | Backup location                        | `docker-tags`                             |
+| `server`       | Hostname of the machine backed up      | Useful for multi-host setups              |
+| `snapshot_id`  | ID of the restic snapshot              | `8d30293d`                                |
+| `tag`          | Restic tag(s) assigned to the snapshot | `tag:location:docker-tags`                |
+
+
 
 ## Restore:
 

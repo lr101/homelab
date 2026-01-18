@@ -1,198 +1,111 @@
+version: 2
+
 backends:
   drive:
     type: rclone
     path: drive_lr101:backup/thinkpad
-    key: ""
-    requirekey: false
-    env: {}
-    rest:
-      user: ""
-      password: ""
-    options: {}
   nas:
     type: sftp
     path: nas:/backup_thinkpad
-    key: ""
-    requirekey: false
-    env: {}
-    rest:
-      user: ""
-      password: ""
-    options: {}
   local:
     type: local
     path: /backup
-    key: ""
-    requirekey: false
-    env: {}
-    rest:
-      user: ""
-      password: ""
-    options: {}
+
+
 global:
   forget:
-    keep-daily: 4
     keep-last: 5
+    keep-daily: 7
+    keep-weekly: 4
     keep-monthly: 12
-    keep-weekly: 1
     keep-yearly: 7
-    retry-lock: 10
+
+
+monitors:
+  stats:
+    type: influx
+
+
 locations:
   docker-tags:
     from:
     - ./.backup
-    type: ""
     to:
     - local
     - nas
     - drive
+    monitors:
+    - stats
     hooks:
-      dir: ""
-      prevalidate: []
       before: /hooks/docker-tags-hook.sh
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host thinkpad --service docker-tags --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host thinkpad --service docker-tags --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+  
   glance:
     from:
     - ./glance
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host thinkpad --service glance --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host thinkpad --service glance --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+    monitors:
+    - stats
+  
   ha:
     from:
     - ./ha
-    type: ""
     to:
     - local
     - nas
+    - drive
+    monitors:
+    - stats
     hooks:
-      dir: ""
-      prevalidate: []
       before:
       - python3 /hooks/mariadb-hook.py mariadb homeassistant --folder ha
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host thinkpad --service ha --status success
-      failure:
-      - python3 /hooks/influx-hook.py --host thinkpad --service ha --status failure
-    cron: ""
-    options: {}
-    copyoption: {}
+  
   monaserver:
     from:
     - ./monaserver
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host thinkpad --service monaserver --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host thinkpad --service monaserver --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+    monitors:
+    - stats
+  
   postgis:
     from:
     - ./postgis
-    type: ""
     to:
     - local
     - nas
     - drive
+    monitors:
+    - stats
     hooks:
-      dir: ""
-      prevalidate: []
       before:
       - python3 /hooks/postgres-hook.py stick-it-db postgres stickitprod tempserver
         --backup-dir postgis/.backup
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host thinkpad --service postgis --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host thinkpad --service postgis --status
-        failure
-    cron: ""
     options:
       backup:
         exclude:
           - '/postgres-data/*'
-    copyoption: {}
+  
   tempserver:
     from:
     - ./tempserver
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host thinkpad --service tempserver --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host thinkpad --service tempserver --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+    monitors:
+    - stats
+  
   traefik:
     from:
     - ./traefik
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host thinkpad --service traefik --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host thinkpad --service traefik --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
-version: 2
+    monitors:
+    - stats
