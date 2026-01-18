@@ -1,249 +1,135 @@
+version: 2
+
 backends:
   drive:
     type: rclone
     path: drive:backup/medion
-    key: ""
-    requirekey: false
-    env: {}
-    rest:
-      user: ""
-      password: ""
-    options: {}
   local:
     type: local
     path: /backup
-    key: ""
-    requirekey: false
-    env: {}
-    rest:
-      user: ""
-      password: ""
-    options: {}
   nas:
     type: sftp
     path: nas:/backup_medion
-    key: ""
-    requirekey: false
-    env: {}
-    rest:
-      user: ""
-      password: ""
-    options: {}
+
+
 global:
   forget:
-    keep-daily: 4
     keep-last: 5
+    keep-daily: 7
+    keep-weekly: 4
     keep-monthly: 12
-    keep-weekly: 1
     keep-yearly: 7
+
+
+monitors:
+  stats:
+    type: influx
+
 locations:
   docker-tags:
     from:
     - ./.backup
-    type: ""
     to:
     - local
     - nas
     - drive
+    monitors:
+    - stats
     hooks:
-      dir: ""
-      prevalidate: []
       before: /hooks/docker-tags-hook.sh
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service docker-tags --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service docker-tags --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+
   immich:
     from:
     - ./immich-app
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service immich --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service immich --status
-        failure
-    cron: ""
+    monitors:
+    - stats
     options:
       backup:
         exclude:
         - '*/postgres/*'
         - '*/library/thumbs/*'
         - '*/library/encoded-video/*'
-    copyoption: {}
+  
   jellyfin:
     from:
     - ./jellyfin
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service jellyfin --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service jellyfin --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+    monitors:
+    - stats
   logging:
     from:
     - ./logging
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service logging --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service logging --status
-        failure
-    cron: ""
+    monitors:
+    - stats
     options:
       backup:
         exclude:
         - '*/influx_backup/*'
         - '*/influx/influx_data/*'
         - '*/prometheus/data/*'
-    copyoption: {}
   nextcloud:
     from:
     - ./nextcloud
-    type: ""
     to:
     - local
     - nas
     - drive
+    monitors:
+    - stats
     hooks:
-      dir: ""
-      prevalidate: []
       before:
       - docker exec nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --on
       - python3 /hooks/mariadb-hook.py nextcloud-database-1 nextcloud --folder nextcloud
       after:
       - docker exec nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --off
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service nextcloud --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service nextcloud --status
-        failure
-      - docker exec nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --off
-    cron: ""
-    options: {}
-    copyoption: {}
+
   pocketid:
     from:
     - ./pocket-id
-    type: ""
     to:
     - local
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service pocketid --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service pocketid --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+    - nas
+    monitors:
+    - stats
+
   stick-it-homepage:
     from:
     - ./stick-it-homepage
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service stick-it-homepage
-        --status success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service stick-it-homepage
-        --status failure
-    cron: ""
-    options: {}
-    copyoption: {}
+    monitors:
+    - stats
+
   traefik:
     from:
     - ./traefik
-    type: ""
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service traefik --status
-        success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service traefik --status
-        failure
-    cron: ""
-    options: {}
-    copyoption: {}
+    monitors:
+    - stats
+    
   adguard:
     from:
-    - ../adguard
-    type: ""
+    - /shared/adguard
     to:
     - local
     - nas
     - drive
-    hooks:
-      dir: ""
-      prevalidate: []
-      before: []
-      after: []
-      success:
-      - python3 /hooks/influx-hook.py --host medion --service adguard --status success
-      failure:
-      - python3 /hooks/influx-hook.py --host medion --service adguard --status failure
-    cron: ""
-    options: {}
-    copyoption: {}
-version: 2
+    monitors:
+    - stats
