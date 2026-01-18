@@ -17,7 +17,6 @@ This repository contains setup templates and configuration files for various app
 | **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.thinkpad.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
 | **backup** | Autorestic | - | - | - | manual | - |
-|  | Restic Exporter | [restic-metrics](https://restic-metrics.thinkpad.lr-projects.de) | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
@@ -46,7 +45,6 @@ This repository contains setup templates and configuration files for various app
 | **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | - | ✅ | ✅ |
 |  | Adguard Exporter | - | - | - | manual | - |
 | **backup** | Autorestic | - | - | - | manual | - |
-|  | Restic Exporter | [restic-metrics](https://restic-metrics.medion.lr-projects.de) | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
