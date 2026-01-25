@@ -25,6 +25,8 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
+| **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
+|  | Adguard Exporter | - | - | ✅ | manual | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Immich Machine Learning | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
@@ -42,8 +44,6 @@ This repository contains setup templates and configuration files for various app
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
-| **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | - | ✅ | ✅ |
-|  | Adguard Exporter | - | - | - | manual | - |
 | **backup** | Autorestic | - | - | - | manual | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
@@ -53,12 +53,10 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **pi-hole** | Pihole | - | `4080, 53` | - | ✅ | ✅ |
-|  | Pihole Influxdb | - | - | - | ✅ | - |
-| **traefik** | Traefik | - | `443, 80` | - | ✅ | ✅ |
-|  | Crowdsec | - | - | - | manual | - |
-| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | - | ✅ | ✅ |
-|  | Adguard Exporter | - | - | - | manual | - |
+| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | ✅ | manual | ✅ |
+|  | Adguard Exporter | - | - | ✅ | manual | - |
+| **traefik** | Traefik | - | `443, 80` | ✅ | ✅ | ✅ |
+|  | Crowdsec | - | - | ✅ | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
