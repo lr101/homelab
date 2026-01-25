@@ -9,24 +9,21 @@ services:
     - ./workdir:/opt/adguardhome/work
     - ./confdir:/opt/adguardhome/conf
     restart: unless-stopped
-    networks:
-    - frontend
-    - adguard
     labels:
     - traefik.enable=true
     - traefik.docker.network=frontend
-    - traefik.http.routers.adguard.rule=Host(`dns.${DEVICE}.lr-projects.de`)
+    - traefik.http.routers.adguard.rule=Host(`dns.ionos.lr-projects.de`)
     - traefik.http.routers.adguard.entrypoints=websecure
     - traefik.http.routers.adguard.tls=true
     - traefik.http.routers.adguard.tls.certresolver=cloudflare
     - traefik.http.routers.adguard.service=adguard-scv
     - traefik.http.services.adguard-scv.loadbalancer.server.port=80
-    - com.centurylinklabs.watchtower.enable=true
     - traefik.http.routers.adguard.middlewares=oidc-auth@file
+    networks:
+      - frontend
     annotations:
     - de.lr-projects.description=DNS for home network
     - de.lr-projects.sso=true
-    - de.lr-projects.deployed_on=medion,ionos
     deploy:
       resources:
         limits:
@@ -40,13 +37,11 @@ services:
     container_name: adguard_exporter
     restart: unless-stopped
     networks:
-    - influxdb-network
-    - adguard
+    - frontend
     env_file: .env
     annotations:
     - de.lr-projects.sso=false
     - de.lr-projects.description=AdGuard Home metrics exporter
-    - de.lr-projects.deployed_on=medion,ionos
     deploy:
       resources:
         limits:
@@ -55,6 +50,3 @@ services:
 networks:
   frontend:
     external: true
-  influxdb-network:
-    external: true
-  adguard: null

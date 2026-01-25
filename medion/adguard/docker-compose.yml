@@ -1,0 +1,55 @@
+services:
+  adguardhome:
+    image: adguard/adguardhome
+    container_name: adguardhome
+    ports:
+    - 53:53/tcp
+    - 53:53/udp
+    volumes:
+    - ./workdir:/opt/adguardhome/work
+    - ./confdir:/opt/adguardhome/conf
+    restart: unless-stopped
+    networks:
+    - frontend
+    - adguard
+    labels:
+    - traefik.enable=true
+    - traefik.docker.network=frontend
+    - traefik.http.routers.adguard.rule=Host(`dns.medion.lr-projects.de`)
+    - traefik.http.routers.adguard.entrypoints=websecure
+    - traefik.http.routers.adguard.tls=true
+    - traefik.http.routers.adguard.tls.certresolver=cloudflare
+    - traefik.http.routers.adguard.service=adguard-scv
+    - traefik.http.services.adguard-scv.loadbalancer.server.port=80
+    - com.centurylinklabs.watchtower.enable=true
+    - traefik.http.routers.adguard.middlewares=oidc-auth@file
+    annotations:
+    - de.lr-projects.description=DNS for home network
+    - de.lr-projects.sso=true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+  adguard-exporter:
+    image: ebrianne/adguard-exporter:latest
+    container_name: adguard_exporter
+    restart: unless-stopped
+    networks:
+    - adguard
+    env_file: .env
+    annotations:
+    - de.lr-projects.sso=false
+    - de.lr-projects.description=AdGuard Home metrics exporter
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+networks:
+  frontend:
+    external: true
+  adguard:

@@ -1,0 +1,53 @@
+backends:
+  local:
+    type: local
+    path: /backup
+    key: ""
+  nas:
+    type: sftp
+    path: nas:/backup_ionos
+    key: ""
+global:
+  forget:
+    keep-daily: 7
+    keep-last: 5
+    keep-monthly: 12
+    keep-weekly: 4
+    keep-yearly: 7
+locations:
+  adguard:
+    from:
+    - ./adguard
+    monitors:
+    - stats
+    to:
+    - local
+    - nas
+  docker-tags:
+    from:
+    - ./.backup
+    monitors:
+    - stats
+    to:
+    - local
+    - nas
+  shared:
+    from:
+    - /shared
+    monitors:
+    - stats
+    to:
+    - local
+    - nas
+  traefik:
+    from:
+    - ./traefik
+    monitors:
+    - stats
+    to:
+    - local
+    - nas
+monitors:
+  stats:
+    type: influx
+version: 2

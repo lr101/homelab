@@ -27,6 +27,7 @@ services:
       WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD: ${EMAIL_PSW}
       WATCHTOWER_NOTIFICATION_EMAIL_SUBJECTTAG: "[Watchtower ${LOCATION}]"
       WATCHTOWER_NOTIFICATION_LEVEL: "info"
+      DOCKER_API_VERSION: 1.49
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/localtime:/etc/localtime:ro

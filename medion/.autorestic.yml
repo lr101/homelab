@@ -126,7 +126,7 @@ locations:
     
   adguard:
     from:
-    - /shared/adguard
+    - ./adguard
     to:
     - local
     - nas
