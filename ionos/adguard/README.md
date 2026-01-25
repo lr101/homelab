@@ -133,6 +133,7 @@ Set the `/etc/docker/daemon.json` file to the docker bridge interface.
 3. Configure the firewall:
   ```
   sudo ufw allow from 172.16.0.0/12 to any port 53
+  sudo ufw enable
   ```
   This allows the entire Docker private IP range (172.16.0.0/12) to access Port 53.
 
