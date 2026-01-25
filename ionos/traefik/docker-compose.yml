@@ -41,6 +41,8 @@ services:
     - 172.20.0.100
     networks:
     - backend
+    labels:
+    - com.centurylinklabs.watchtower.enable=true
     environment:
     - BOUNCER_KEY_TRAEFIK=$CROWDSEC_BOUNCER_API_KEY
     - COLLECTIONS=crowdsecurity/traefik crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-generic-rules
