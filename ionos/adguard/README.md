@@ -1,8 +1,5 @@
----
-title: Docker DNS Setup
-date: '2025-12-13T13:05:22+01:00'
-draft: false
----
+# DNS Setup
+
 This document describes practical options for using Adguard Home as your local DNS resolver together with Docker containers running on the same host.
 
 ## Summary
