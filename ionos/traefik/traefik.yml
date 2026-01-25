@@ -26,7 +26,6 @@ providers:
 
 log:
   level: DEBUG
-  filepath: /logs/traefik.log
 
 accesslog:
   filepath: /logs/access.log

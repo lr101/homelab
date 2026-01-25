@@ -20,8 +20,7 @@ services:
     - traefik.http.services.adguard-scv.loadbalancer.server.port=80
     - traefik.http.routers.adguard.middlewares=oidc-auth@file
     networks:
-      backend:
-        ipv4_address: 172.20.0.100
+      - frontend
     annotations:
     - de.lr-projects.description=DNS for home network
     - de.lr-projects.sso=true
@@ -38,10 +37,8 @@ services:
     container_name: adguard_exporter
     restart: unless-stopped
     networks:
-    - backend
+    - frontend
     env_file: .env
-    dns:
-      - 172.20.0.100
     annotations:
     - de.lr-projects.sso=false
     - de.lr-projects.description=AdGuard Home metrics exporter
@@ -51,9 +48,5 @@ services:
           cpus: '0.1'
           memory: 128M
 networks:
-  backend:
+  frontend:
     external: true
-    ipam:
-      config:
-      - subnet: 172.20.0.0/16
-

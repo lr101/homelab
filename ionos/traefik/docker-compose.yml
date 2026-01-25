@@ -11,9 +11,7 @@ services:
     - de.lr-projects.description=Reverse Proxy (with https)
     - de.lr-projects.sso=true
     networks:
-    - backend
-    dns:
-    - 172.20.0.100
+    - frontend
     labels:
     - com.centurylinklabs.watchtower.enable=true
     volumes:
@@ -37,10 +35,8 @@ services:
     annotations:
     - de.lr-projects.description=Security monitoring
     - de.lr-projects.sso=false
-    dns:
-    - 172.20.0.100
     networks:
-    - backend
+    - frontend
     labels:
     - com.centurylinklabs.watchtower.enable=true
     environment:
@@ -57,8 +53,5 @@ services:
           cpus: '0.1'
           memory: 128M
 networks:
-  backend:
+  frontend:
     external: true
-    ipam:
-      config:
-      - subnet: 172.20.0.0/16
