@@ -18,7 +18,9 @@ LOCAL_BACKUP_PATH=/home/lr/.backup                     # (Optional) Local backup
 4. Add the backend configurations. This depends on your setup:
 
 - **SFTP**
-  - Mount .ssh key folder: `/home/{user}/.ssh:/root/.ssh:ro`
+  - Mount .ssh key folder: `~/.ssh:/root/.ssh:ro`
+  - Define a ssh config and make sure the root user group has access to it: `sudo chown root:$USER ~/.ssh/config`
+  - Run the ssh command at least once to add the fingerprint to known hosts
   - .autorestic.yml:
     ```yaml
     backends:
@@ -51,7 +53,7 @@ LOCAL_BACKUP_PATH=/home/lr/.backup                     # (Optional) Local backup
         path: /backup
     ``` 
 
-5. Run 
+1. Run 
 ```sh
 sudo docker compose run --rm autorestic autorestic check
 ```
@@ -140,10 +142,10 @@ The provided tags:
 Use the following to restore. If autorestic is already running `sudo docker container exec` can be used. Otherwise navigate to [shared/backup](./) and use `sudo docker compose run --rm`:
 ```sh
 # List snapshot metadata
-sudo docker container exec autorestic autorestic -c /data/.autorestic.yml exec -av -- snapshots
+sudo docker container exec autorestic autorestic -exec -av -- snapshots
 
 # Restore a specific snapshot
-sudo docker container exec autorestic autorestic -c /data/.autorestic.yml restore -l <location> --from <backend> --to /data/<directory> <snapshot>
+sudo docker container exec autorestic autorestic -restore -l <location> --from <backend> --to /data/<directory> <snapshot>
 
 # Set correct access rights
 sudo chown -R <user>:<user> $DEVICE_FOLDER_PATH/<directory>
@@ -154,7 +156,7 @@ mv $DEVICE_FOLDER_PATH/<directory>/data/<location> /<some_location>
 
 For example based on traefik running in the thinkpad folder:
 ```sh
-sudo docker container exec autorestic autorestic -c /data/.autorestic.yml restore -l traefik --from nas --to /data/.restore f291f55a
+sudo docker container exec autorestic autorestic -restore -l traefik --from nas --to /data/.restore f291f55a
 
 sudo chown -R lr:lr ~/homelab_templates/thinkpad/.restore/
 

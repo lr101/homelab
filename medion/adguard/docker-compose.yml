@@ -46,7 +46,6 @@ services:
     annotations:
     - de.lr-projects.sso=false
     - de.lr-projects.description=AdGuard Home metrics exporter
-    - de.lr-projects.deployed_on=medion,ionos
     deploy:
       resources:
         limits:
