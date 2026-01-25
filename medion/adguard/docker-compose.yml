@@ -15,7 +15,7 @@ services:
     labels:
     - traefik.enable=true
     - traefik.docker.network=frontend
-    - traefik.http.routers.adguard.rule=Host(`dns.${DEVICE}.lr-projects.de`)
+    - traefik.http.routers.adguard.rule=Host(`dns.medion.lr-projects.de`)
     - traefik.http.routers.adguard.entrypoints=websecure
     - traefik.http.routers.adguard.tls=true
     - traefik.http.routers.adguard.tls.certresolver=cloudflare
@@ -26,7 +26,6 @@ services:
     annotations:
     - de.lr-projects.description=DNS for home network
     - de.lr-projects.sso=true
-    - de.lr-projects.deployed_on=medion,ionos
     deploy:
       resources:
         limits:

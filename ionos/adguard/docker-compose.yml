@@ -12,7 +12,7 @@ services:
     labels:
     - traefik.enable=true
     - traefik.docker.network=frontend
-    - traefik.http.routers.adguard.rule=Host(`dns.${DEVICE}.lr-projects.de`)
+    - traefik.http.routers.adguard.rule=Host(`dns.ionos.lr-projects.de`)
     - traefik.http.routers.adguard.entrypoints=websecure
     - traefik.http.routers.adguard.tls=true
     - traefik.http.routers.adguard.tls.certresolver=cloudflare
