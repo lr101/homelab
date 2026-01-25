@@ -40,7 +40,6 @@ services:
     container_name: adguard_exporter
     restart: unless-stopped
     networks:
-    - influxdb-network
     - adguard
     env_file: .env
     annotations:
@@ -54,6 +53,4 @@ services:
 networks:
   frontend:
     external: true
-  influxdb-network:
-    external: true
-  adguard: null
+  adguard:
