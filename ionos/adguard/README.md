@@ -5,21 +5,18 @@ draft: false
 ---
 This document describes practical options for using Adguard Home as your local DNS resolver together with Docker containers running on the same host.
 
-Summary
--------
+## Summary
+
 
 Docker isolates container networks from the host and each other by design. Running a DNS resolver (Adguard Home) in a container on the same host introduces a challenge: containers must be able to reach the resolver's IP, but Docker's default network isolation and DNS config don't guarantee that when the resolver runs inside a container on the same host.
 
 This guide explains recommended approaches, trade-offs, concrete commands and docker-compose examples to make Adguard Home usable as DNS for other containers.
 
-Problem statement
------------------
+In my opinion [Solution B](#solution-b-define-docker-wide) exposes less risks and has less configuration overhead and is therefore preferred. Both solutions are valid and therefore described here. 
 
-- Running Adguard Home in a container and expecting other containers to resolve via it fails when DNS lookups inside containers use Docker's internal DNS or when the resolver is inaccessible due to network isolation.
-- Using `network_mode: host` for all containers makes the resolver available but removes container network isolation and can cause port conflicts.
 
-Recommended solution (practical balance)
----------------------------------------
+## Solution A (Defining a specific Network)
+
 
 Create a user-defined Docker network with a specific subnet, attach Adguard Home to that network with a static IP, and attach other containers to the same network. Configure those services to use the Adguard Home static IP as their DNS server. This keeps service reachability simple while avoiding `host` networking for every container.
 
@@ -33,15 +30,8 @@ Cons:
 - Containers on that network can still reach each other (less isolation than fully separate networks).
 - Requires managing static IPs and the dedicated network.
 
-Alternatives
-------------
+### Configuration (step-by-step)
 
-- Host network mode for Adguard Home and/or clients (quick but removes isolation).
-- Run Adguard Home on the host (not in a container) so it is reachable at the host IP.
-- Use an external DNS forwarder on the host pointing to Adguard Home container (complex bridging required).
-
-Configuration (step-by-step)
-----------------------------
 
 1. Create a dedicated Docker network with a fixed subnet and gateway. Choose an IP range that does not collide with your host network:
 
@@ -103,8 +93,50 @@ networks:
       - subnet: 172.20.0.0/16
 ```
 
-Notes
------
+## Solution B (Define docker wide):
 
-- The Adguard Home container must be reachable on the network's IP (here `172.20.0.100`). Ensure no IP conflict.
-- Binding host ports 53 (DNS) and 80 (HTTP) from the Adguard Home container to the host can conflict with other services. Adjust ports or use traefik on different host ports if needed.
+This setup forces all Docker containers to use your local AdGuard Home instance for DNS resolution by setting the default nameserver to the docker bridge ip.
+
+Pro: Works for all containers
+
+Con: Exposes port 53 to all networks on the device
+
+### Configuration
+
+Set the `/etc/docker/daemon.json` file to the docker bridge interface.
+
+1. Create a adguard container that exposes its dns port to all interfaces:
+  ```yml
+  services:
+    adguardhome:
+      image: adguard/adguardhome
+      container_name: adguardhome
+      ports:
+      - 53:53/tcp
+      - 53:53/udp
+      volumes:
+      - ./workdir:/opt/adguardhome/work
+      - ./confdir:/opt/adguardhome/conf
+      restart: unless-stopped
+  ```
+2. Check the docker0 interface ip using `ip addr show docker0`. The default value should be `172.17.0.1`
+
+  And update the file to something like this:
+  ```json
+  {
+    "dns": ["172.17.0.1", "8.8.8.8"]
+  }
+  ```
+2. Update the changes:
+  ```
+  sudo systemctl restart docker
+  ```
+  What this does is set the default DNS server for all containers to the docker bridge interface. Because adguard exposes its ports and binds to all interfaces (0.0.0.0:53) it also binds to the bridge interface. When we now allow all docker networks to access the bridge interface, the DNS server can be accessed by all containers.
+
+3. Configure the firewall:
+  ```
+  sudo ufw allow from 172.16.0.0/12 to any port 53
+  ```
+  This allows the entire Docker private IP range (172.16.0.0/12) to access Port 53.
+
+This setup is in my opinion a lot cleaner, as less configuration is needed and only port 53 instead of all devices are exposed to each other.
