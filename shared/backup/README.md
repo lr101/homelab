@@ -20,6 +20,7 @@ LOCAL_BACKUP_PATH=/home/lr/.backup                     # (Optional) Local backup
 - **SFTP**
   - Mount .ssh key folder: `~/.ssh:/root/.ssh:ro`
   - Define a ssh config and make sure the root user group has access to it: `sudo chown root:$USER ~/.ssh/config`
+  - See the [Synology docs](SETUP_SYNOLOGY.md) for more info on how add access.
   - Run the ssh command at least once to add the fingerprint to known hosts
   - .autorestic.yml:
     ```yaml
