@@ -53,7 +53,7 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | ✅ | manual | ✅ |
+| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
 |  | Adguard Exporter | - | - | ✅ | ✅ | - |
 | **traefik** | Traefik | - | `443, 80` | ✅ | ✅ | ✅ |
 |  | Crowdsec | - | - | ✅ | ✅ | - |
