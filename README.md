@@ -11,6 +11,7 @@ This repository contains setup templates and configuration files for various app
 | **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | ✅ | ✅ | - |
 | **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Mariadb | - | `3306` | ✅ | ✅ | - |
+| **iwi_bulletinboard** | App | - | - | - | ✅ | - |
 | **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 |  | Minio | [minio](https://minio.thinkpad.lr-projects.de), [minio-admin](https://minio-admin.thinkpad.lr-projects.de) | `9000, 9001` | ✅ | manual | - |
 | **postgis** | Db | - | - | ✅ | ✅ | - |
