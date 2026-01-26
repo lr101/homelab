@@ -10,13 +10,13 @@ This repository contains setup templates and configuration files for various app
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
 | **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | ✅ | ✅ | - |
 | **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | ✅ | ✅ | ✅ |
-|  | Mariadb | - | `3306` | ✅ | manual | - |
+|  | Mariadb | - | `3306` | ✅ | ✅ | - |
 | **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 |  | Minio | [minio](https://minio.thinkpad.lr-projects.de), [minio-admin](https://minio-admin.thinkpad.lr-projects.de) | `9000, 9001` | ✅ | manual | - |
 | **postgis** | Db | - | - | ✅ | ✅ | - |
 | **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.thinkpad.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
-| **backup** | Autorestic | - | - | - | manual | - |
+| **backup** | Autorestic | - | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
@@ -26,7 +26,7 @@ This repository contains setup templates and configuration files for various app
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
 | **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
-|  | Adguard Exporter | - | - | ✅ | manual | - |
+|  | Adguard Exporter | - | - | ✅ | ✅ | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Immich Machine Learning | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
@@ -40,11 +40,11 @@ This repository contains setup templates and configuration files for various app
 | **nextcloud** | Nextcloud | [nextcloud](https://nextcloud.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Database | - | - | ✅ | ✅ | - |
 |  | Redis | [office](https://office.medion.lr-projects.de) | - | ✅ | ✅ | - |
-| **pdf** | Stirling Pdf | [pdf](https://pdf.lr-projects.de) | - | - | manual | - |
+| **pdf** | Stirling Pdf | [pdf](https://pdf.lr-projects.de) | - | - | ✅ | - |
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
-| **backup** | Autorestic | - | - | - | manual | - |
+| **backup** | Autorestic | - | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
@@ -53,8 +53,8 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | ✅ | manual | ✅ |
-|  | Adguard Exporter | - | - | ✅ | manual | - |
+| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
+|  | Adguard Exporter | - | - | ✅ | ✅ | - |
 | **traefik** | Traefik | - | `443, 80` | ✅ | ✅ | ✅ |
 |  | Crowdsec | - | - | ✅ | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |

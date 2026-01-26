@@ -26,6 +26,7 @@ services:
     - traefik.http.routers.stirling.tls.certresolver=cloudflare
     - traefik.http.services.stirling.loadbalancer.server.port=8080
     - traefik.docker.network=frontend
+    - com.centurylinklabs.watchtower.enable=true
     restart: unless-stopped
     deploy:
       resources:

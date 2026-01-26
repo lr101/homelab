@@ -40,6 +40,8 @@ services:
     - 3306:3306
     annotations:
     - de.lr-projects.description=MariaDB database for Home Assistant
+    labels:
+    - com.centurylinklabs.watchtower.enable=true
     deploy:
       resources:
         limits:
