@@ -9,6 +9,10 @@ entryPoints:
     address: :80
   websecure:
     address: :443
+    forwardedHeaders:
+      trustedIPs:
+        - "10.217.236.0/32"
+        - "10.217.236.1/32"
     transport:
       respondingTimeouts:
         readTimeout: 600s
