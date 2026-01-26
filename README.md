@@ -16,7 +16,7 @@ This repository contains setup templates and configuration files for various app
 | **postgis** | Db | - | - | ✅ | ✅ | - |
 | **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.thinkpad.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
-| **backup** | Autorestic | - | - | - | manual | - |
+| **backup** | Autorestic | - | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
@@ -44,7 +44,7 @@ This repository contains setup templates and configuration files for various app
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
-| **backup** | Autorestic | - | - | - | manual | - |
+| **backup** | Autorestic | - | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
