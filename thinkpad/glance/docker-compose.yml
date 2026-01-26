@@ -21,9 +21,12 @@ services:
     - de.lr-projects.description=System monitoring dashboard
     deploy:
       resources:
-        limits:
+        reservations:
           cpus: '0.25'
-          memory: 256M
+          memory: 265M
+        limits:
+          cpus: '1'
+          memory: 512M
 networks:
   frontend:
     external: true
