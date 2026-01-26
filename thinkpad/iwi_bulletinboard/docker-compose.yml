@@ -1,0 +1,12 @@
+services:
+  app:
+    image: ghcr.io/lr101/iwi_bulletinboard_backend:latest
+    labels:
+    - com.centurylinklabs.watchtower.enable=true
+    annotations:
+    - de.lr-projects.description=Push Notification Service for the IWI News App
+    environment:
+      - fetchTime=60
+    restart: unless-stopped
+    volumes:
+      - ./secret.json:/app/secret.json
