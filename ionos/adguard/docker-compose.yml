@@ -42,6 +42,8 @@ services:
     annotations:
     - de.lr-projects.sso=false
     - de.lr-projects.description=AdGuard Home metrics exporter
+    labels:
+    - com.centurylinklabs.watchtower.enable=true
     deploy:
       resources:
         limits:
