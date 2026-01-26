@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     privileged: true                                # (Optional) Required for certain hooks and file access     
     env_file: .env
+    labels:
+    - com.centurylinklabs.watchtower.enable=true
     annotations:
       - de.lr-projects.description=Automated backup solution with Restic
       - de.lr-projects.deployed_on=medion,thinkpad
