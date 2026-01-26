@@ -34,103 +34,83 @@
     - size: full
       widgets:
         - type: monitor
-          cache: 60m
+          timeout: 4s
           title: Services (Public)
           sites:
             - title: Homepage
-              timout: 5s
               url: https://lr-projects.de
               icon: https://lr-projects.de/_next/image?url=/icons/logo_lr_white.png&w=64&q=75
             - title: Stick-It Homepage
-              timout: 5s
               url: https://stick-it-map.lr-projects.de
               icon: https://stick-it-map.lr-projects.de/_next/image?url=/icons/logo-round.png&w=64&q=75
             - title: Stick-It Backend
-              timout: 5s
               url: https://stick-it.lr-projects.de/public/swagger-ui/index.html
               icon: https://stick-it-map.lr-projects.de/_next/image?url=/icons/logo-round.png&w=64&q=75
             - title: Stick-It OSM
-              timout: 5s
               url: https://map.lr-projects.de/tile/0/0/0.png
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/openstreetmap.svg
             - title: Nextcloud
-              timout: 5s
               url: https://nextcloud.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/nextcloud.svg
             - title: Pocket ID
-              timout: 5s
               url: https://sso.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/pocket-id-light.svg
 
         - type: monitor
-          cache: 60m
+          timeout: 4s
           title: Services (Private)
           sites:
             - title: Grafana
-              timeout: 10s
               url: https://grafana.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/grafana.svg
             - title: Home Assistant
-              timout: 5s
               url: https://ha.thinkpad.lr-projects.de/auth/oidc/redirect
               icon: https://cdn.jsdelivr.net/gh/loganmarchione/homelab-svg-assets/assets/homeassistant.svg
             - title: Adguard Ionos
-              timout: 5s
               url: https://dns.ionos.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/adguard-home.svg
               alt-status-codes:
                 - 401
             - title: Adguard Medion
-              timout: 5s
               url: https://dns.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/adguard-home.svg
               alt-status-codes:
                 - 401
             - title: InfluxDB
-              timout: 5s
               url: https://influx.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/influxdb.svg
             - title: Traefik (Thinkpad)
-              timout: 5s
               url: https://traefik.thinkpad.lr-projects.de/dashboard/#
               icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/traefik-proxy.svg
               alt-status-codes:
                 - 401
             - title: Traefik (Medion)
-              timout: 5s
               url: https://traefik.medion.lr-projects.de/dashboard/#
               icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/traefik-proxy.svg
               alt-status-codes:
                 - 401
             - title: Traefik (Ionos)
-              timout: 5s
               url: https://traefik.ionos.lr-projects.de/dashboard/#
               icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/traefik-proxy.svg
               alt-status-codes:
                 - 401
 
             - title: Nextcloud
-              timout: 5s
               url: https://nextcloud.medion.lr-projects.de/login
               icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/nextcloud-blue.svg
             - title: Minio Console
-              timout: 5s
               url: https://minio-admin.thinkpad.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/minio-light.png
             - title: Immich
-              timout: 5s
               url: https://immich.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/immich.svg
             - title: Jellyfin
-              timout: 5s
               url: https://jellyfin.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/jellyfin.svg
             - title: Temppi
-              timout: 5s
               url: https://temppi.thinkpad.lr-projects.de/?
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/raspberry-pi-light.svg
             - title: Uptime Kuma
-              timout: 5s
               url: https://uptime.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/uptime-kuma.svg
               alt-status-codes:
