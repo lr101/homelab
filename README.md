@@ -40,7 +40,7 @@ This repository contains setup templates and configuration files for various app
 | **nextcloud** | Nextcloud | [nextcloud](https://nextcloud.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Database | - | - | ✅ | ✅ | - |
 |  | Redis | [office](https://office.medion.lr-projects.de) | - | ✅ | ✅ | - |
-| **pdf** | Stirling Pdf | [pdf](https://pdf.lr-projects.de) | - | - | manual | - |
+| **pdf** | Stirling Pdf | [pdf](https://pdf.lr-projects.de) | - | - | ✅ | - |
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
