@@ -26,7 +26,7 @@ This repository contains setup templates and configuration files for various app
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
 | **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
-|  | Adguard Exporter | - | - | ✅ | manual | - |
+|  | Adguard Exporter | - | - | ✅ | ✅ | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Immich Machine Learning | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
