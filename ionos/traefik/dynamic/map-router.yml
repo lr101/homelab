@@ -1,123 +1,126 @@
 http:
   routers:
-    # =====================
     # Zoom 0-6
-    # =====================
     map-0-6:
       rule: "Host(`map.lr-projects.de`) && PathRegexp(`^/tile/(0|1|2|3|4|5|6)/([0-9]+)/([0-9]+)(.*)$`)"
       entryPoints:
         - websecure
       tls:
         certResolver: cloudflare
+      service: tile-srv-stadia
       middlewares:
-        - tile-zoom-0-6
-      service: noop@internal
+        - tile-auth-0-6   # Inject Key
+        - tile-rewrite-std # Rewrite Path
 
-    # =====================
     # Zoom 7-9
-    # =====================
     map-7-9:
       rule: "Host(`map.lr-projects.de`) && PathRegexp(`^/tile/(7|8|9)/([0-9]+)/([0-9]+)(.*)$`)"
       entryPoints:
         - websecure
       tls:
         certResolver: cloudflare
-      service: noop@internal
+      service: tile-srv-stadia
       middlewares:
-        - tile-zoom-7-9
+        - tile-auth-7-9
+        - tile-rewrite-std
 
-    # =====================
     # Zoom 10-12
-    # =====================
     map-10-12:
       rule: "Host(`map.lr-projects.de`) && PathRegexp(`^/tile/(1[0-2])/([0-9]+)/([0-9]+)(.*)$`)"
       entryPoints:
         - websecure
       tls:
         certResolver: cloudflare
-      service: noop@internal
+      service: tile-srv-stadia
       middlewares:
-        - tile-zoom-10-12
+        - tile-auth-10-12
+        - tile-rewrite-std
 
-    # =====================
     # Zoom 13-14
-    # =====================
     map-13-14:
       rule: "Host(`map.lr-projects.de`) && PathRegexp(`^/tile/(1[3-4])/([0-9]+)/([0-9]+)(.*)$`)"
       entryPoints:
         - websecure
       tls:
         certResolver: cloudflare
-      service: noop@internal
+      service: tile-srv-stadia
       middlewares:
-        - tile-zoom-13-14
-
-    # =====================
-    # Zoom 14-16
-    # =====================
+        - tile-auth-13-14
+        - tile-rewrite-std
+        
+    # Zoom 14-16 (Forces Z=12 upstream)
     map-14-16:
       rule: "Host(`map.lr-projects.de`) && PathRegexp(`^/tile/(1[4-6])/([0-9]+)/([0-9]+)(.*)$`)"
       entryPoints:
         - websecure
       tls:
         certResolver: cloudflare
-      service: noop@internal
+      service: tile-srv-stadia
       middlewares:
-        - tile-zoom-14-16
+        - tile-auth-14-16
+        - tile-rewrite-14-16 # Special rewrite for this group
 
-    # =====================
     # Default fallback
-    # =====================
     map-default:
       rule: "Host(`map.lr-projects.de`) && PathRegexp(`^/tile/([0-9]+)/([0-9]+)/([0-9]+)(.*)$`)"
       entryPoints:
         - websecure
       tls:
         certResolver: cloudflare
-      service: noop@internal
+      service: tile-srv-stadia
       priority: 1
       middlewares:
-        - tile-zoom-default
+        - tile-auth-default
+        - tile-rewrite-std
 
   middlewares:
-    tile-zoom-0-6:
-      redirectRegex:
-        regex: "(.*)/tile/([0-6]+)/([0-9]+)/([0-9]+)(.*)"
-        replacement: "https://tiles.stadiamaps.com/tiles/outdoors/${2}/${3}/${4}.png?api_key={{ env `API_KEY_0_6` }}"
+    # Path Rewrites
+    # Standard: Transforms /tile/Z/X/Y -> /tiles/outdoors/Z/X/Y.png
+    tile-rewrite-std:
+      replacePathRegex:
+        regex: "^/tile/([0-9]+)/([0-9]+)/([0-9]+).*"
+        replacement: "/tiles/outdoors/$1/$2/$3.png"
 
-    tile-zoom-7-9:
-      redirectRegex:
-        regex: "(.*)/tile/([7-9]+)/([0-9]+)/([0-9]+)(.*)"
-        replacement: "https://tiles.stadiamaps.com/tiles/outdoors/${2}/${3}/${4}.png?api_key={{ env `API_KEY_7_9` }}"
-        permanent: true
+    # Zoom 14-16: Transforms /tile/Z/X/Y -> /tiles/outdoors/12/X/Y.png (Forces Zoom 12)
+    tile-rewrite-14-16:
+      replacePathRegex:
+        regex: "^/tile/(?:1[4-6])/([0-9]+)/([0-9]+).*"
+        replacement: "/tiles/outdoors/12/$1/$2.png"
 
-    tile-zoom-10-12:
-      redirectRegex:
-        regex: "(.*)/tile/(1[0-2])/([0-9]+)/([0-9]+)(.*)"
-        replacement: "https://tiles.stadiamaps.com/tiles/outdoors/${2}/${3}/${4}.png?api_key={{ env `API_KEY_10_12` }}"
-        permanent: true
+    # Authentication Headers (Injects API Key)
+    tile-auth-0-6:
+      headers:
+        customRequestHeaders:
+          Authorization: "Stadia-Auth {{ env `API_KEY_0_6` }}"
 
-    tile-zoom-13-14:
-      redirectRegex:
-        regex: "(.*)/tile/(1[3-4])/([0-9]+)/([0-9]+)(.*)"
-        replacement: "https://tiles.stadiamaps.com/tiles/outdoors/${2}/${3}/${4}.png?api_key={{ env `API_KEY_13_14` }}"
-        permanent: true
+    tile-auth-7-9:
+      headers:
+        customRequestHeaders:
+          Authorization: "Stadia-Auth {{ env `API_KEY_7_9` }}"
 
-    tile-zoom-14-16:
-      redirectRegex:
-        regex: "(.*)/tile/(1[4-6])/([0-9]+)/([0-9]+)(.*)"
-        replacement: "https://tiles.stadiamaps.com/tiles/outdoors/12/${2}/${3}.png?api_key={{ env `API_KEY_14_16` }}"
-        permanent: true
+    tile-auth-10-12:
+      headers:
+        customRequestHeaders:
+          Authorization: "Stadia-Auth {{ env `API_KEY_10_12` }}"
 
-    tile-zoom-default:
-      redirectRegex:
-        regex: "(.*)/tile/([0-9]+)/([0-9]+)/([0-9]+)(.*)"
-        replacement: "https://tiles.stadiamaps.com/tiles/outdoors/${2}/${3}/${4}.png?api_key={{ env `API_KEY_DEFAULT` }}"
-        permanent: true
+    tile-auth-13-14:
+      headers:
+        customRequestHeaders:
+          Authorization: "Stadia-Auth {{ env `API_KEY_13_14` }}"
 
+    tile-auth-14-16:
+      headers:
+        customRequestHeaders:
+          Authorization: "Stadia-Auth {{ env `API_KEY_14_16` }}"
+
+    tile-auth-default:
+      headers:
+        customRequestHeaders:
+          Authorization: "Stadia-Auth {{ env `API_KEY_DEFAULT` }}"
 
   services:
-    tile-srv-0-6:
+    tile-srv-stadia:
       loadBalancer:
+        passHostHeader: false # Sends "tiles.stadiamaps.com" as host, not "map.lr-projects.de"
         servers:
           - url: "https://tiles.stadiamaps.com"
