@@ -8,7 +8,6 @@ services:
     env_file:
     - ./.env
     networks:
-    - stick-it-network
     - db
     - influxdb-network
     - frontend
@@ -23,8 +22,6 @@ services:
     annotations:
     - de.lr-projects.description=Stick It backend
     - de.lr-projects.sso=false
-    depends_on:
-    - minio
     deploy:
       resources:
         limits:
@@ -33,53 +30,9 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-  minio:
-    image: minio/minio
-    container_name: minio_local
-    ports:
-    - 9000:9000
-    - 9001:9001
-    volumes:
-    - ./minio/data:/data
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: ${MINIO_PSW}
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    networks:
-    - stick-it-network
-    - frontend
-    labels:
-    - traefik.enable=true
-    - traefik.docker.network=frontend
-    - traefik.http.routers.minio.rule=Host(`minio.thinkpad.lr-projects.de`)
-    - traefik.http.routers.minio.entrypoints=websecure
-    - traefik.http.routers.minio.tls=true
-    - traefik.http.routers.minio.tls.certresolver=cloudflare
-    - traefik.http.routers.minio.service=minio
-    - traefik.http.services.minio.loadbalancer.server.port=9000
-    - traefik.http.routers.minio-admin.rule=Host(`minio-admin.thinkpad.lr-projects.de`)
-    - traefik.http.routers.minio-admin.entrypoints=websecure
-    - traefik.http.routers.minio-admin.tls=true
-    - traefik.http.routers.minio-admin.tls.certresolver=cloudflare
-    - traefik.http.routers.minio-admin.service=minio-admin
-    - traefik.http.services.minio-admin.loadbalancer.server.port=9001
-    annotations:
-    - de.lr-projects.description=S3 compatible object storage
-    - de.lr-projects.sso=false
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
 networks:
   influxdb-network:
     external: true
-  stick-it-network:
-    external: false
   db:
     external: true
   frontend:

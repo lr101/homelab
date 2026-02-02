@@ -1,14 +1,6 @@
 # dynamic.yml (dynamic configuration)
 http:
   routers:
-    # bitwarden
-    bitwarden:
-      entryPoints: websecure
-      rule: "Host(`bitwarden.lr-projects.de`)"
-      tls:
-        certResolver: cloudflare
-      service: bitwarden-service
-    
     # home (dashboard)
     home:
       entryPoints: 
@@ -18,23 +10,6 @@ http:
         certResolver: cloudflare
       service: home-service
    
-    # portfolio
-    root:
-      entryPoints: websecure
-      rule: "Host(`lr-projects.de`)"
-      tls:
-        certResolver: cloudflare
-      service: portfolio-service
-
-    # portfolio
-    www:
-      entryPoints: websecure
-      rule: "Host(`www.lr-projects.de`)"
-      service: portfolio-service
-      tls:
-        certResolver: cloudflare
-
-
     # minio
     minio:
       entryPoints: websecure
@@ -88,29 +63,16 @@ http:
 
   
   services:
-    bitwarden-service:
-      loadBalancer:
-        serversTransport: bitwarden-transport
-        servers:
-          - url: "https://10.217.236.3:6443"
-        passHostHeader: true
-  
     home-service:
       loadBalancer:
         servers:
           - url: "https://home.thinkpad.lr-projects.de"
         passHostHeader: false
 
-    portfolio-service:
-      loadBalancer:
-        servers:
-          - url: "https://portfolio.medion.lr-projects.de"
-        passHostHeader: false
-
     minio-service:
       loadBalancer:
         servers:
-          - url: "http://10.217.236.3:9000"
+          - url: "https://s3.thinkpad.lr-projects.de"
         passHostHeader: true
 
     nextcloud-service:
