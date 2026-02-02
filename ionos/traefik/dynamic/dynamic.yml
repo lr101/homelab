@@ -105,11 +105,6 @@ http:
           - url: "https://stick-it-home.medion.lr-projects.de"
         passHostHeader: false
 
-  serversTransports:
-    bitwarden-transport:
-      serverName: "10.217.236.3"
-      insecureSkipVerify: true
-
   middlewares:
     body-50mb:
       buffering:
