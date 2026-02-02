@@ -1,0 +1,35 @@
+services:
+
+  garage:
+    image: dxflrs/garage:latest
+    container_name: garage
+    restart: unless-stopped
+    volumes:
+      - ./config/garage.toml:/etc/garage.toml
+      - ./meta:/var/lib/garage/meta
+      - ./data:/var/lib/garage/data
+    networks:
+      - frontend
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=frontend
+      - "traefik.http.routers.s3.rule=Host(`minio.lr-projects.de`) || HostRegexp(`{bucket:.+}.minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"
+      - traefik.http.routers.s3.entrypoints=websecure
+      - traefik.http.routers.s3.tls=true
+      - traefik.http.routers.s3.tls.certresolver=cloudflare
+      - traefik.http.routers.s3.service=s3
+      - traefik.http.services.s3.loadbalancer.server.port=3900
+      - com.centurylinklabs.watchtower.enable=true
+    annotations:
+      - de.lr-projects.description=S3 compatible object storage
+      - de.lr-projects.sso=false
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+
+networks:  
+  frontend:
+    external: true

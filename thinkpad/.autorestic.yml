@@ -65,10 +65,14 @@ locations:
   monaserver:
     from:
     - ./monaserver
+    - ./garage
     to:
     - local
     - nas
     - drive
+    hooks:
+      before:
+      - python3 /hooks/postgres-hook.py stick-it-db postgres stickitprod --backup-dir monaserver/.backup
     monitors:
     - stats
   
@@ -83,8 +87,7 @@ locations:
     - stats
     hooks:
       before:
-      - python3 /hooks/postgres-hook.py stick-it-db postgres stickitprod tempserver
-        --backup-dir postgis/.backup
+      - python3 /hooks/postgres-hook.py stick-it-db postgres tempserver --backup-dir postgis/.backup
     options:
       backup:
         exclude:
