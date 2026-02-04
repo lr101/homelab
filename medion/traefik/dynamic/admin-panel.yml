@@ -1,0 +1,23 @@
+http:
+  routers:
+    cockpit:
+      rule: "Host(`admin.medion.lr-projects.de`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: cloudflare
+      service: cockpit
+      middlewares:
+        - oidc-auth
+
+  services:
+    cockpit:
+      loadBalancer:
+        serversTransport: cockpit-transport
+        servers:
+          - url: "https://host.docker.internal:9090"
+
+
+  serversTransports:
+    cockpit-transport:
+      insecureSkipVerify: true
