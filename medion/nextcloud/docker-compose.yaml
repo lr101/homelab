@@ -16,25 +16,6 @@ services:
     - traefik.http.routers.nextcloud.entrypoints=websecure
     - traefik.http.routers.nextcloud.tls=true
     - traefik.http.routers.nextcloud.tls.certresolver=cloudflare
-    - traefik.http.routers.nextcloud.middlewares=nextcloud-middlewares-secure-headers
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.accessControlMaxAge=100
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.sslRedirect=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.stsSeconds=63072000
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.stsIncludeSubdomains=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.stsPreload=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.forceSTSHeader=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.customFrameOptionsValue=SAMEORIGIN
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.contentTypeNosniff=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.browserXssFilter=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.referrerPolicy=no-referrer
-    - "traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.featurePolicy=camera'none'; geolocation 'none'; microphone 'none'; payment 'none'; usb 'none'; vr 'none';"
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.customResponseHeaders.X-Robots-Tag=noindex,nofollow
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.customResponseHeaders.server=
-    - traefik.http.routers.nextcloud.middlewares=nextcloud-caldav
-    - traefik.http.middlewares.nextcloud-caldav.redirectregex.permanent=true
-    - traefik.http.middlewares.nextcloud-caldav.redirectregex.regex=^https://(.*)/.well-known/(card|cal)dav
-    - traefik.http.middlewares.nextcloud-caldav.redirectregex.replacement=https://$${1}/remote.php/dav/
-    - traefik.docker.network=frontend
     - com.centurylinklabs.watchtower.enable=true
     env_file: .env
     environment:
@@ -106,7 +87,7 @@ services:
       - frontend
     labels:
     - traefik.enable=true
-    - traefik.http.routers.office.rule=Host(`office.medion.lr-projects.de`)
+    - traefik.http.routers.office.rule=Host(`office.lr-projects.de`) || Host(`office.medion.lr-projects.de`)
     - traefik.http.routers.office.entrypoints=websecure
     - traefik.http.routers.office.tls=true
     - traefik.http.routers.office.tls.certresolver=cloudflare
@@ -117,6 +98,7 @@ services:
     - de.lr-projects.sso=false
     environment:
     - aliasgroup1=https://nextcloud.lr-projects.de
+    - domain=nextcloud\\.lr-projects\\.de
     - extra_params=--o:ssl.enable=false --o:ssl.termination=true
     cap_add:
       - MKNOD
@@ -126,8 +108,8 @@ services:
           cpus: '2'
           memory: 2G
 volumes:
-  database: null
+  database:
 networks:
   frontend:
     external: true
-  backend-nextcloud: null
+  backend-nextcloud:
