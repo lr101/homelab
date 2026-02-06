@@ -16,27 +16,6 @@ services:
     - traefik.http.routers.nextcloud.entrypoints=websecure
     - traefik.http.routers.nextcloud.tls=true
     - traefik.http.routers.nextcloud.tls.certresolver=cloudflare
-    - traefik.http.routers.nextcloud.middlewares=nextcloud-middlewares-secure-headers
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.accessControlMaxAge=100
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.sslRedirect=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.stsSeconds=63072000
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.stsIncludeSubdomains=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.stsPreload=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.forceSTSHeader=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.customFrameOptionsValue=SAMEORIGIN
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.contentTypeNosniff=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.browserXssFilter=true
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.referrerPolicy=no-referrer
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.featurePolicy=camera
-      'none'; geolocation 'none'; microphone 'none'; payment 'none'; usb 'none'; vr
-      'none';
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.customResponseHeaders.X-Robots-Tag=noindex,nofollow
-    - traefik.http.middlewares.nextcloud-middlewares-secure-headers.headers.customResponseHeaders.server=
-    - traefik.http.routers.nextcloud.middlewares=nextcloud-caldav
-    - traefik.http.middlewares.nextcloud-caldav.redirectregex.permanent=true
-    - traefik.http.middlewares.nextcloud-caldav.redirectregex.regex=^https://(.*)/.well-known/(card|cal)dav
-    - traefik.http.middlewares.nextcloud-caldav.redirectregex.replacement=https://$${1}/remote.php/dav/
-    - traefik.docker.network=frontend
     - com.centurylinklabs.watchtower.enable=true
     env_file: .env
     environment:
@@ -49,13 +28,6 @@ services:
     depends_on:
     - database
     - redis
-    dns:
-    - 10.217.236.1
-    - 8.8.8.8
-    resources:
-      limits:
-        cpus: '4'
-        memory: 5G
     deploy:
       resources:
         limits:
@@ -64,6 +36,7 @@ services:
         reservations:
           cpus: '2'
           memory: 2.5G
+
   database:
     image: mariadb:11.8
     restart: always
@@ -87,16 +60,34 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+
   redis:
     env_file: .env
     networks:
-    - frontend
-    image: collabora/code:latest
+      - backend-nextcloud
+    image: redis
     restart: always
     command: redis-server --requirepass ${REDIS_PASSWORD}
+    annotations:
+    - de.lr-projects.description=Nextcloud Redis Cache
+    - de.lr-projects.sso=false
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  office:
+    container_name: office
+    image: collabora/code:latest
+    restart: always
+    networks:
+      - frontend
     labels:
     - traefik.enable=true
-    - traefik.http.routers.office.rule=Host(`office.medion.lr-projects.de`)
+    - traefik.http.routers.office.rule=Host(`office.lr-projects.de`) || Host(`office.medion.lr-projects.de`)
     - traefik.http.routers.office.entrypoints=websecure
     - traefik.http.routers.office.tls=true
     - traefik.http.routers.office.tls.certresolver=cloudflare
@@ -105,20 +96,20 @@ services:
     annotations:
     - de.lr-projects.description=LibreOffice Online
     - de.lr-projects.sso=false
-    container_name: office
     environment:
     - aliasgroup1=https://nextcloud.lr-projects.de
+    - domain=nextcloud\\.lr-projects\\.de
     - extra_params=--o:ssl.enable=false --o:ssl.termination=true
     cap_add:
-    - MKNOD
+      - MKNOD
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '2'
+          memory: 2G
 volumes:
-  database: null
+  database:
 networks:
   frontend:
     external: true
-  backend-nextcloud: null
+  backend-nextcloud:
