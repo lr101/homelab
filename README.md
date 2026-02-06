@@ -40,7 +40,8 @@ This repository contains setup templates and configuration files for various app
 |  | Uptime Kuma | [uptime](https://uptime.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 | **nextcloud** | Nextcloud | [nextcloud](https://nextcloud.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Database | - | - | ✅ | ✅ | - |
-|  | Redis | [office](https://office.medion.lr-projects.de) | - | ✅ | ✅ | - |
+|  | Redis | - | - | ✅ | ✅ | - |
+|  | Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
 | **pdf** | Stirling Pdf | [pdf](https://pdf.lr-projects.de) | - | - | ✅ | - |
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
