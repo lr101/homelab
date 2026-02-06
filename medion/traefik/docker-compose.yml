@@ -27,6 +27,8 @@ services:
     - ./certs:/var/traefik/certs
     - ./logs:/logs
     restart: unless-stopped
+    extra_hosts:
+    - "host.docker.internal:host-gateway"
     networks:
     - frontend
     deploy:
