@@ -20,10 +20,10 @@ http:
       headers:
         browserXssFilter: true
         contentTypeNosniff: true
-        frameDeny: true
         referrerPolicy: "no-referrer-when-downgrade"
-        customFrameOptionsValue: "SAMEORIGIN"
         stsIncludeSubdomains: true
+        frameDeny: false
+        customFrameOptionsValue: ""
         stsPreload: true
         stsSeconds: 31536000
         permissionsPolicy: >
@@ -45,10 +45,11 @@ http:
           object-src 'none';
           base-uri 'self';
           form-action 'self';
-          frame-ancestors 'self';
+          frame-ancestors 'self' https://*.lr-projects.de;
         customResponseHeaders:
           server: ""
           x-powered-by: ""
+          x-frame-options: ""
 
     crowdsec:
       plugin:
