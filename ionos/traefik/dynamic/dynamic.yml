@@ -9,7 +9,7 @@ http:
       tls:
         certResolver: cloudflare
       service: home-service
-   
+ 
     # minio
     minio:
       entryPoints: websecure
@@ -26,6 +26,9 @@ http:
       tls:
         certResolver: cloudflare
       service: nextcloud-service
+      middlewares:
+        - nextcloud-office-headers
+        - nextcloud_redirectregex
 
 
     office:
@@ -34,6 +37,8 @@ http:
       tls:
         certResolver: cloudflare
       service: office-service
+      middlewares:
+        - nextcloud-office-headers
     
 # sso
     sso:
@@ -69,6 +74,7 @@ http:
           - url: "https://home.thinkpad.lr-projects.de"
         passHostHeader: false
 
+
     minio-service:
       loadBalancer:
         servers:
@@ -85,7 +91,7 @@ http:
       loadBalancer:
         servers:
           - url: "https://office.medion.lr-projects.de"
-        passHostHeader: false
+        passHostHeader: true
 
     sso-service:
       loadBalancer:
@@ -115,3 +121,17 @@ http:
         regex: "https://(.*)/.well-known/(?:card|cal)dav"
         replacement: "https://$$1/remote.php/dav"
         permanent: true
+
+    nextcloud-office-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        referrerPolicy: "no-referrer-when-downgrade"
+        frameDeny: false
+        customFrameOptionsValue: ""
+        contentSecurityPolicy: "frame-ancestors 'self' https://nextcloud.lr-projects.de https://office.lr-projects.de"
+        customResponseHeaders:
+          X-Frame-Options: ""
