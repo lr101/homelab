@@ -2,11 +2,9 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
-  ],
-  "enabledManagers": ["docker-compose"],
+  ]
   "packageRules": [
     {
-      "matchDatasources": ["docker"],
       "ignoreVersions": ["latest"]
     }
   ]
