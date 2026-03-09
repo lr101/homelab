@@ -14,6 +14,7 @@ This repository contains setup templates and configuration files for various app
 |  | Mariadb | - | `3306` | ✅ | ✅ | - |
 | **iwi_bulletinboard** | App | - | - | - | ✅ | - |
 | **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de) | - | ✅ | manual | - |
+|  | Stick It Web | [stick-it-web](https://stick-it-web.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 | **postgis** | Db | - | - | ✅ | ✅ | - |
 | **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.thinkpad.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
