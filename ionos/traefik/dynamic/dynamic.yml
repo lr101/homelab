@@ -17,6 +17,8 @@ http:
       tls:
         certResolver: cloudflare
       service: minio-service
+      middlewares:
+        - s3-headers
 
 
     # nextcloud
@@ -56,6 +58,8 @@ http:
       tls:
         certResolver: cloudflare
       service: stickit-service
+      middlewares:
+        - secHeaders
 
 
     # stick-it-map
@@ -65,6 +69,8 @@ http:
       tls:
         certResolver: cloudflare
       service: stickit-map-service
+      middlewares:
+        - secHeaders
 
   
   services:
@@ -134,4 +140,12 @@ http:
         customFrameOptionsValue: ""
         contentSecurityPolicy: "frame-ancestors 'self' https://nextcloud.lr-projects.de https://office.lr-projects.de"
         customResponseHeaders:
-          X-Frame-Options: ""
+          X-Frame-Options: "sameorigin"
+          x-powered-by: ""
+          server: ""
+
+
+    s3-headers:
+      headers:
+        customResponseHeaders:
+          Access-Control-Allow-Origin: "*"

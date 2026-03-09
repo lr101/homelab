@@ -33,19 +33,8 @@ http:
           fullscreen=(self), geolocation=(self),
           microphone=(self), midi=(),
           payment=(), picture-in-picture=(self),
-          publickey-credentials-get=(self),
-        contentSecurityPolicy: >
-          default-src 'self';
-          script-src 'self' https://*.lr-projects.de;
-          style-src 'self' https://*.lr-projects.de;
-          img-src 'self' https://cdn.jsdelivr.net https://*.lr-projects.de data:;
-          font-src 'self' https://*.lr-projects.de;
-          connect-src 'self' https://*.lr-projects.de;
-          frame-src 'self' https://*.lr-projects.de;
-          object-src 'none';
-          base-uri 'self';
-          form-action 'self';
-          frame-ancestors 'self' https://*.lr-projects.de;
+          publickey-credentials-get=(self)
+        contentSecurityPolicy: "default-src 'self'; script-src 'self'; object-src 'none';"
         customResponseHeaders:
           server: ""
           x-powered-by: ""
