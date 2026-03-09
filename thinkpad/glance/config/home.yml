@@ -42,12 +42,12 @@
             - title: Stick-It Homepage
               url: https://stick-it-map.lr-projects.de
               icon: https://stick-it-map.lr-projects.de/_next/image?url=/icons/logo-round.png&w=64&q=75
+            - title: Stick-It Web App
+              url: https://app.lr-projects.de
+              icon: https://stick-it-map.lr-projects.de/_next/image?url=/icons/logo-round.png&w=64&q=75
             - title: Stick-It Backend
               url: https://stick-it.lr-projects.de/public/swagger-ui/index.html
               icon: https://stick-it-map.lr-projects.de/_next/image?url=/icons/logo-round.png&w=64&q=75
-            - title: Stick-It OSM
-              url: https://map.lr-projects.de/tile/0/0/0.png
-              icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/openstreetmap.svg
             - title: Nextcloud
               url: https://nextcloud.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/nextcloud.svg
@@ -119,3 +119,5 @@
             - title: Medion Admin Panel
               url: https://admin.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/cockpit-light.svg
+              alt-status-codes:
+                - 401

@@ -9,6 +9,16 @@ http:
       tls:
         certResolver: cloudflare
       service: home-service
+
+    stick-it-web:
+      entryPoints: 
+        - websecure
+      rule: "Host(`app.lr-projects.de`)"
+      tls:
+        certResolver: cloudflare
+      service: stick-it-web-service
+      middlewares:
+        - stick-it-web-headers
  
     # minio
     minio:
@@ -80,6 +90,11 @@ http:
           - url: "https://home.thinkpad.lr-projects.de"
         passHostHeader: false
 
+    stick-it-web-service:
+      loadBalancer:
+        servers:
+          - url: "https://stick-it-web.thinkpad.lr-projects.de"
+        passHostHeader: false
 
     minio-service:
       loadBalancer:
@@ -139,6 +154,22 @@ http:
         frameDeny: false
         customFrameOptionsValue: ""
         contentSecurityPolicy: "frame-ancestors 'self' https://nextcloud.lr-projects.de https://office.lr-projects.de"
+        customResponseHeaders:
+          X-Frame-Options: "sameorigin"
+          x-powered-by: ""
+          server: ""
+
+    stick-it-web-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        referrerPolicy: "no-referrer-when-downgrade"
+        frameDeny: false
+        customFrameOptionsValue: ""
+        contentSecurityPolicy: "frame-ancestors 'self' https://app.lr-projects.de https://stick-it.lr-projects.de https://minio.lr-projects.de"
         customResponseHeaders:
           X-Frame-Options: "sameorigin"
           x-powered-by: ""
