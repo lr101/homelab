@@ -1,6 +1,6 @@
 services:
   stick-it-server:
-    image: lrprojects/stick-it-server:0.0.14
+    image: lrprojects/stick-it-server:0.0.16
     container_name: stick-it-server
     restart: unless-stopped
     volumes:
@@ -30,6 +30,34 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+
+  stick-it-web:
+    image: ghcr.io/lr101/stick-it:main
+    container_name: stick-it-web
+    restart: unless-stopped
+    networks:
+    - frontend
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.stick-it-web.rule=Host(`stick-it-web.thinkpad.lr-projects.de`)
+    - traefik.http.routers.stick-it-web.entrypoints=websecure
+    - traefik.http.routers.stick-it-web.tls=true
+    - traefik.http.routers.stick-it-web.tls.certresolver=cloudflare
+    - traefik.http.services.stick-it-web.loadbalancer.server.port=80
+    - traefik.docker.network=frontend
+    annotations:
+    - de.lr-projects.description=Stick It Web app
+    - de.lr-projects.sso=false
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 200M
+        reservations:
+          cpus: '0.1'
+          memory: 100M
+
+  
 networks:
   influxdb-network:
     external: true
