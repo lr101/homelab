@@ -13,7 +13,6 @@ entryPoints:
     http:
       middlewares:
         - crowdsec@file
-        - secHeaders@file
     forwardedHeaders:
       trustedIPs:
         - "127.0.0.1/32"
