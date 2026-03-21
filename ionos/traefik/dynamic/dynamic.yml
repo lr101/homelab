@@ -40,6 +40,7 @@ http:
       service: nextcloud-service
       middlewares:
         - nextcloud-office-headers
+        - nextcloud_block_direct_login
         - nextcloud_redirectregex
 
 
@@ -141,6 +142,14 @@ http:
       redirectRegex:
         regex: "https://(.*)/.well-known/(?:card|cal)dav"
         replacement: "https://$$1/remote.php/dav"
+        permanent: true
+
+    nextcloud_block_direct_login:
+      redirectRegex:
+        # Matches the login URL whenever the 'direct=1' parameter is present
+        regex: "https://(.*)/login\\?.*direct=1.*"
+        # Redirects back to the clean login URL, which Nextcloud will then push to OIDC
+        replacement: "https://$$1/login"
         permanent: true
 
     nextcloud-office-headers:
