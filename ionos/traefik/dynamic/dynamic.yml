@@ -141,15 +141,14 @@ http:
     nextcloud_redirectregex:
       redirectRegex:
         regex: "https://(.*)/.well-known/(?:card|cal)dav"
-        replacement: "https://$$1/remote.php/dav"
+        replacement: "https://$1/remote.php/dav"
         permanent: true
 
+    # Matches the login URL far all query params and redirects to /login to always use SSO login
     nextcloud_block_direct_login:
       redirectRegex:
-        # Matches the login URL whenever the 'direct=1' parameter is present
-        regex: "https://(.*)/login\\?.*direct=1.*"
-        # Redirects back to the clean login URL, which Nextcloud will then push to OIDC
-        replacement: "https://$$1/login"
+        regex: "^https://(.*)/login\\?(.*)$*"
+        replacement: "https://$1/login"
         permanent: true
 
     nextcloud-office-headers:
