@@ -37,6 +37,32 @@ services:
           cpus: '2'
           memory: 2.5G
 
+  elasticsearch:
+    image: elasticsearch:9.3.0
+    container_name: nextcloud_elasticsearch
+    networks:
+    - backend-nextcloud
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false 
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./elasticsearch_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1.5G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
   database:
     image: mariadb:11.8
     restart: always
