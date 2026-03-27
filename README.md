@@ -40,6 +40,7 @@ This repository contains setup templates and configuration files for various app
 |  | Prometheus | [prometheus](https://prometheus.medion.lr-projects.de) | - | ✅ | ✅ | - |
 |  | Uptime Kuma | [uptime](https://uptime.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 | **nextcloud** | Nextcloud | [nextcloud](https://nextcloud.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
+|  | Elasticsearch | - | - | ✅ | manual | - |
 |  | Database | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
 |  | Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
