@@ -31,6 +31,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/localtime:/etc/localtime:ro
+      - ~/.docker/config.json:/config.json:ro
     annotations:
       - de.lr-projects.description=Automated Docker container updates
       - de.lr-projects.deployed_on=medion,thinkpad,ionos
