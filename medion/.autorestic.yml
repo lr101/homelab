@@ -87,6 +87,10 @@ locations:
     - drive
     monitors:
     - stats
+    options:
+      backup:
+        exclude:
+        - '*/elasticsearch_data/*'
     hooks:
       before:
       - docker exec nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --on

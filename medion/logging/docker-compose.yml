@@ -91,7 +91,7 @@ services:
     - traefik.http.routers.prometheus.tls.certresolver=cloudflare
     - traefik.http.services.prometheus.loadbalancer.server.port=9090
     - com.centurylinklabs.watchtower.enable=true
-    - traefik.http.routers.adguard.middlewares=oidc-auth@file
+    - traefik.http.routers.prometheus.middlewares=oidc-auth@file
     annotations:
     - de.lr-projects.description=Metric collection and alerting
     - de.lr-projects.sso=false
@@ -104,7 +104,7 @@ services:
           cpus: '0.25'
           memory: 256M
   uptime-kuma:
-    image: louislam/uptime-kuma:1
+    image: louislam/uptime-kuma:2
     restart: unless-stopped
     container_name: uptime-kuma
     volumes:
