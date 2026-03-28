@@ -30,7 +30,7 @@ services:
           cpus: '1'
           memory: 768M
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:12.2
     container_name: mariadb
     restart: unless-stopped
     env_file: .env
