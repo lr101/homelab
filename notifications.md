@@ -8,5 +8,5 @@ This page documents the notification setup. Currently this is done mostly via em
 - Pocket-ID: `info@lr-projects.de`
 - Grafana: `info@lr-projects.de`
 - Monaserver: `info@lr-projects.de`
-- 
-- Watchtower: `lr.dev.projects@gmail.com`
+- Uptime
+- Watchtower: `info@lr-projects.de`
