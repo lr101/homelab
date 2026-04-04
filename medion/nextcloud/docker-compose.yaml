@@ -1,6 +1,6 @@
 services:
   nextcloud:
-    image: nextcloud:latest
+    image: nextcloud:33
     restart: always
     annotations:
     - de.lr-projects.description=File sharing and collaboration
@@ -16,6 +16,8 @@ services:
     - traefik.http.routers.nextcloud.entrypoints=websecure
     - traefik.http.routers.nextcloud.tls=true
     - traefik.http.routers.nextcloud.tls.certresolver=cloudflare
+    - traefik.docker.network=frontend
+    - traefik.http.services.nextcloud.loadbalancer.server.port=80
     - com.centurylinklabs.watchtower.enable=true
     env_file: .env
     environment:
@@ -98,7 +100,7 @@ services:
     - de.lr-projects.description=Nextcloud Redis Cache
     - de.lr-projects.sso=false
     labels:
-      - "com.centurylinklabs.watchtower.enable=true"
+    - com.centurylinklabs.watchtower.enable=true
     deploy:
       resources:
         limits:
