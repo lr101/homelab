@@ -40,7 +40,7 @@ services:
           memory: 2.5G
 
   elasticsearch:
-    image: elasticsearch:9.3.0
+    image: elasticsearch:9.3.2
     container_name: nextcloud_elasticsearch
     networks:
     - backend-nextcloud
