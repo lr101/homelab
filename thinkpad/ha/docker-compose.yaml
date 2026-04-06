@@ -30,10 +30,12 @@ services:
           cpus: '1'
           memory: 768M
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:12
     container_name: mariadb
     restart: unless-stopped
     env_file: .env
+    environment:
+    - MARIADB_AUTO_UPGRADE=1
     volumes:
     - ./mariadb:/var/lib/mysql
     ports:
