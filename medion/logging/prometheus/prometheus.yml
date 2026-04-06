@@ -5,8 +5,8 @@ global:
 scrape_configs:
   - job_name: adguard-medion
     static_configs:
-      - targets: ['adguard-exporter:9617', 'dns-metrics.ionos.lr-projects.de']
-  - job_name: 'restic'
+      - targets: ['dns-metrics.ionos.lr-projects.de']
+  - job_name: adguard-ionos
     scheme: https
     static_configs:
-      - targets: ['restic-metrics.medion.lr-projects.de', 'restic-metrics.thinkpad.lr-projects.de']
+      - targets: ['dns-metrics.ionos.lr-projects.de']
