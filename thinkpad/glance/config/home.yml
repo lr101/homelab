@@ -100,6 +100,9 @@
             - title: Immich
               url: https://immich.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/immich.svg
+            - title: Immich Kiosk
+              url: https://diashow.medion.lr-projects.de
+              icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/immich-kiosk-light.svg
             - title: Jellyfin
               url: https://jellyfin.medion.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/jellyfin.svg
@@ -118,6 +121,11 @@
           sites:
             - title: Medion Admin Panel
               url: https://admin.medion.lr-projects.de
+              icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/cockpit-light.svg
+              alt-status-codes:
+                - 401
+            - title: Ionos Admin Panel
+              url: https://admin.ionos.lr-projects.de
               icon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/cockpit-light.svg
               alt-status-codes:
                 - 401
