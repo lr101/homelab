@@ -47,6 +47,7 @@ services:
     - ./crowdsec/etc:/etc/crowdsec
     - ./traefik-logs:/var/log/traefik:ro
     - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+    - ./crowdsec/allowlist:/etc/crowdsec/parsers/s02-enrich:ro
     deploy:
       resources:
         limits:
