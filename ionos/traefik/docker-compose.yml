@@ -7,6 +7,8 @@ services:
     ports:
     - 443:443
     - 80:80
+    extra_hosts: 
+    - "host.docker.internal:host-gateway"
     annotations:
     - de.lr-projects.description=Reverse Proxy (with https)
     - de.lr-projects.sso=true

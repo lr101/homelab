@@ -30,6 +30,16 @@ http:
         - allow-vpn-ips
 
 
+    admin-cockpit:
+      entryPoints: websecure
+      rule: "Host(`admin.ionos.lr-projects.de`)"
+      tls:
+        certResolver: cloudflare
+      service: cockpit
+      middlewares:
+        - allow-vpn-ips
+        - oidc-auth
+
   services:
     adguard-scv:
       loadBalancer:
@@ -40,3 +50,15 @@ http:
       loadBalancer:
         servers:
           - url: "http://adguard-exporter:9617"
+
+
+    cockpit:
+      loadBalancer:
+        serversTransport: cockpit-transport
+        servers:
+          - url: "https://host.docker.internal:9090"
+
+
+  serversTransports:
+    cockpit-transport:
+      insecureSkipVerify: true
