@@ -66,7 +66,7 @@ services:
           memory: 1G
 
   database:
-    image: mariadb:11.8
+    image: mariadb:12.2
     restart: always
     env_file: .env
     networks:
