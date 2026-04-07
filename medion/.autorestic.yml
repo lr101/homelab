@@ -35,6 +35,7 @@ locations:
     - drive
     monitors:
     - stats
+    forget: prune
     hooks:
       before: /hooks/docker-tags-hook.sh
 
@@ -47,6 +48,7 @@ locations:
     - drive
     monitors:
     - stats
+    forget: prune
     options:
       backup:
         exclude:
@@ -72,6 +74,7 @@ locations:
     - drive
     monitors:
     - stats
+    forget: prune
     options:
       backup:
         exclude:
@@ -87,6 +90,7 @@ locations:
     - drive
     monitors:
     - stats
+    forget: prune
     options:
       backup:
         exclude:
@@ -105,6 +109,7 @@ locations:
     - local
     - drive
     - nas
+    forget: prune
     monitors:
     - stats
 
@@ -115,6 +120,7 @@ locations:
     - local
     - nas
     - drive
+    forget: prune
     monitors:
     - stats
 
@@ -125,6 +131,7 @@ locations:
     - local
     - nas
     - drive
+    forget: prune
     monitors:
     - stats
     
@@ -135,5 +142,6 @@ locations:
     - local
     - nas
     - drive
+    forget: prune
     monitors:
     - stats

@@ -36,6 +36,7 @@ locations:
     - drive
     monitors:
     - stats
+    forget: prune
     hooks:
       before: /hooks/docker-tags-hook.sh
   
@@ -46,6 +47,7 @@ locations:
     - local
     - nas
     - drive
+    forget: prune
     monitors:
     - stats
   
@@ -58,6 +60,7 @@ locations:
     - drive
     monitors:
     - stats
+    forget: prune
     hooks:
       before:
       - python3 /hooks/mariadb-hook.py mariadb homeassistant --folder ha
@@ -70,6 +73,7 @@ locations:
     - local
     - nas
     - drive
+    forget: prune
     hooks:
       before:
       - python3 /hooks/postgres-hook.py stick-it-db postgres stickitprod --backup-dir monaserver/.backup
@@ -85,6 +89,7 @@ locations:
     - drive
     monitors:
     - stats
+    forget: prune
     hooks:
       before:
       - python3 /hooks/postgres-hook.py stick-it-db postgres tempserver --backup-dir postgis/.backup
@@ -100,6 +105,7 @@ locations:
     - local
     - nas
     - drive
+    forget: prune
     monitors:
     - stats
   
@@ -110,5 +116,6 @@ locations:
     - local
     - nas
     - drive
+    forget: prune
     monitors:
     - stats

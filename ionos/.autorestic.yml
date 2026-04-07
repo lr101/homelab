@@ -23,6 +23,7 @@ locations:
     to:
     - local
     - nas
+    forget: prune
   docker-tags:
     from:
     - ./.backup
@@ -31,6 +32,7 @@ locations:
     to:
     - local
     - nas
+    forget: prune
   shared:
     from:
     - /shared
@@ -39,6 +41,7 @@ locations:
     to:
     - local
     - nas
+    forget: prune
   traefik:
     from:
     - ./traefik
@@ -47,6 +50,7 @@ locations:
     to:
     - local
     - nas
+    forget: prune
 monitors:
   stats:
     type: influx
