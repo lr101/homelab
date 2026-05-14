@@ -27,6 +27,7 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
+| **actual-budget** | Actual Server | [budget](https://budget.medion.lr-projects.de) | - | - | ✅ | - |
 | **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
 |  | Adguard Exporter | - | - | ✅ | ✅ | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
@@ -44,7 +45,6 @@ This repository contains setup templates and configuration files for various app
 |  | Database | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
 |  | Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
-| **pdf** | Stirling Pdf | [pdf](https://pdf.lr-projects.de) | - | - | ✅ | - |
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
