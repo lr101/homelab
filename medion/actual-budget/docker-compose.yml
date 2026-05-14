@@ -1,0 +1,41 @@
+services:
+  actual_server:
+    image: docker.io/actualbudget/actual-server:latest
+    container_name: budget
+    environment:
+      - ACTUAL_UPLOAD_FILE_SYNC_SIZE_LIMIT_MB=20
+      - ACTUAL_UPLOAD_SYNC_ENCRYPTED_FILE_SYNC_SIZE_LIMIT_MB=50
+      - ACTUAL_UPLOAD_FILE_SIZE_LIMIT_MB=20
+      - ACTUAL_USER_CREATION_MODE=login
+    volumes:
+      - ./actual-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'node src/scripts/health-check.js']
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+    - frontend
+    labels:
+    - traefik.enable=true
+    - traefik.docker.network=frontend
+    - traefik.http.routers.budget.rule=Host(`budget.medion.lr-projects.de`)
+    - traefik.http.routers.budget.entrypoints=websecure
+    - traefik.http.routers.budget.tls=true
+    - traefik.http.routers.budget.tls.certresolver=cloudflare
+    - traefik.http.routers.budget.service=budget-scv
+    - traefik.http.services.budget-scv.loadbalancer.server.port=5006
+    - com.centurylinklabs.watchtower.enable=true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+networks:
+  frontend:
+    external: true
