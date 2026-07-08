@@ -135,16 +135,6 @@ services:
     volumes:
     - ./config:/config
     restart: always
-    healthcheck:
-      test:
-      - CMD
-      - curl
-      - -f
-      - http://localhost:3000/health
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 volumes:
   model-cache: null
 networks:
