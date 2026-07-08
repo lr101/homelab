@@ -1,6 +1,6 @@
 services:
   nextcloud:
-    image: nextcloud:33
+    image: nextcloud:34
     restart: always
     annotations:
     - de.lr-projects.description=File sharing and collaboration
@@ -12,7 +12,7 @@ services:
     - backend-nextcloud
     labels:
     - traefik.enable=true
-    - traefik.http.routers.nextcloud.rule=Host(`nextcloud.medion.lr-projects.de`)
+    - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.medion.lr-projects.de`) || Host(`nextcloud.lr-projects.de`)"
     - traefik.http.routers.nextcloud.entrypoints=websecure
     - traefik.http.routers.nextcloud.tls=true
     - traefik.http.routers.nextcloud.tls.certresolver=cloudflare
@@ -40,7 +40,7 @@ services:
           memory: 2.5G
 
   elasticsearch:
-    image: elasticsearch:9.3.2
+    image: elasticsearch:9.4.3
     container_name: nextcloud_elasticsearch
     networks:
     - backend-nextcloud
