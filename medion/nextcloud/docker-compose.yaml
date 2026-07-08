@@ -1,6 +1,6 @@
 services:
   nextcloud:
-    image: nextcloud:33
+    image: nextcloud:34
     restart: always
     annotations:
     - de.lr-projects.description=File sharing and collaboration
