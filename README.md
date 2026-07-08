@@ -8,12 +8,13 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | ✅ | ✅ | - |
+| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | - | ✅ | - |
 | **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | ✅ | ✅ | - |
 | **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Mariadb | - | `3306` | ✅ | ✅ | - |
 | **iwi_bulletinboard** | App | - | - | - | ✅ | - |
 | **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de) | - | ✅ | manual | - |
+|  | Rustfs | [minio](https://minio.lr-projects.de), [s3-admin](https://s3-admin.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 |  | Stick It Web | [stick-it-web](https://stick-it-web.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 | **postgis** | Db | - | - | ✅ | ✅ | - |
 | **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
