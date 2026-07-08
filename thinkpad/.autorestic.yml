@@ -68,7 +68,6 @@ locations:
   monaserver:
     from:
     - ./monaserver
-    - ./garage
     to:
     - local
     - nas

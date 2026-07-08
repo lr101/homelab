@@ -13,7 +13,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=frontend
-      - "traefik.http.routers.s3.rule=Host(`minio.lr-projects.de`) || HostRegexp(`{bucket:.+}.minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"
+      - "traefik.http.routers.s3.rule=Host(`minio.lr-projects.de`) || HostRegexp(`{bucket:.+}.minio.lr-projects.de`) || Host(`s3-garage.thinkpad.lr-projects.de`)"
       - traefik.http.routers.s3.entrypoints=websecure
       - traefik.http.routers.s3.tls=true
       - traefik.http.routers.s3.tls.certresolver=cloudflare

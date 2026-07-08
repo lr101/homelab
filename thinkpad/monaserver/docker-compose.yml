@@ -1,6 +1,6 @@
 services:
   stick-it-server:
-    image: lrprojects/stick-it-server:0.0.16
+    image: ghcr.io/lr101/stick-it-server-go:snapshot
     container_name: stick-it-server
     restart: unless-stopped
     volumes:
@@ -8,8 +8,6 @@ services:
     env_file:
     - ./.env
     networks:
-    - db
-    - influxdb-network
     - frontend
     labels:
     - traefik.enable=true
@@ -30,6 +28,37 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    volumes:
+      - ./minio:/data  # Altes MinIO-Verzeichnis mounten
+    networks:
+    - frontend
+    env_file: .env
+    labels:
+    - traefik.enable=true
+    - "traefik.http.routers.rustfs.rule=Host(`minio.lr-projects.de`) || HostRegexp(`{bucket:.+}.minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"
+    - traefik.http.routers.rustfs.entrypoints=websecure
+    - traefik.http.routers.rustfs.tls=true
+    - traefik.http.routers.rustfs.tls.certresolver=cloudflare
+    - traefik.http.services.rustfs-srv.loadbalancer.server.port=9000
+    - traefik.http.routers.rustfs.service=rustfs-srv
+    - traefik.http.routers.rustfs-admin.rule=Host(`s3-admin.thinkpad.lr-projects.de`)
+    - traefik.http.routers.rustfs-admin.entrypoints=websecure
+    - traefik.http.routers.rustfs-admin.tls=true
+    - traefik.http.routers.rustfs-admin.tls.certresolver=cloudflare
+    - traefik.http.services.rustfs-admin-srv.loadbalancer.server.port=9001
+    - traefik.http.routers.rustfs-admin.service=rustfs-admin-srv
+    - traefik.docker.network=frontend
+    environment:
+    - RUSTFS_ACCESS_KEY=${MINIO_ACCESS_KEY}
+    - RUSTFS_SECRET_KEY=${MINIO_SECRET_KEY}
+    - RUSTFS_SERVER_DOMAINS=${MINIO_ENDPOINT}
+    command: server /data --address ":9000" --console-address ":9001"
+    restart: always
+
 
   stick-it-web:
     image: ghcr.io/lr101/stick-it:main
@@ -59,9 +88,5 @@ services:
 
   
 networks:
-  influxdb-network:
-    external: true
-  db:
-    external: true
   frontend:
     external: true

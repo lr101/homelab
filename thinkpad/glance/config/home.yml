@@ -39,6 +39,7 @@
           sites:
             - title: Homepage
               url: https://lr-projects.de
+              icon: https://minio.lr-projects.de/stick-it-static/images/logo.jpg
             - title: Stick-It Homepage
               url: https://stick-it-map.lr-projects.de
               icon: https://stick-it-map.lr-projects.de/_next/image?url=/icons/logo-round.png&w=64&q=75

@@ -22,7 +22,7 @@ services:
       MAX_CONNECTIONS: 200
     networks:
     - frontend
-    - db
+#    - postgis
     labels:
     - traefik.enable=true
     - traefik.http.routers.tempserver.rule=Host(`temppi.thinkpad.lr-projects.de`)
@@ -42,5 +42,5 @@ services:
 networks:
   frontend:
     external: true
-  db:
+  postgis:
     external: true
