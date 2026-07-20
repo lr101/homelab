@@ -1,6 +1,6 @@
 services:
   nextcloud:
-    image: nextcloud:33
+    image: nextcloud:34
     restart: always
     annotations:
     - de.lr-projects.description=File sharing and collaboration
@@ -107,10 +107,9 @@ services:
           cpus: '0.5'
           memory: 512M
 
-  office:
-    container_name: office
-    image: collabora/code:latest
-    restart: always
+  euro-office:
+    image: ghcr.io/euro-office/documentserver:latest
+    restart: unless-stopped
     networks:
       - frontend
     labels:
@@ -120,21 +119,21 @@ services:
     - traefik.http.routers.office.tls=true
     - traefik.http.routers.office.tls.certresolver=cloudflare
     - traefik.docker.network=frontend
+    - traefik.http.routers.office.service=office-nextcloud
+    - traefik.http.services.office-nextcloud.loadbalancer.server.port=80
     - com.centurylinklabs.watchtower.enable=true
     annotations:
     - de.lr-projects.description=LibreOffice Online
     - de.lr-projects.sso=false
     environment:
-    - aliasgroup1=https://nextcloud.lr-projects.de
-    - domain=nextcloud\\.lr-projects\\.de
-    - extra_params=--o:ssl.enable=false --o:ssl.termination=true
-    cap_add:
-      - MKNOD
+      - JWT_ENABLED=true
+      - JWT_SECRET=${JWT_SECRET_OFFICE}
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 2G
+        
 volumes:
   database:
 networks:
