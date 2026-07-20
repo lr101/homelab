@@ -45,7 +45,7 @@ This repository contains setup templates and configuration files for various app
 |  | Elasticsearch | - | - | ✅ | manual | - |
 |  | Database | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
-|  | Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
+|  | Euro Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
