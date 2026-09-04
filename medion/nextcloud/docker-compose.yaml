@@ -1,6 +1,8 @@
 services:
   nextcloud:
-    image: nextcloud:34
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: always
     annotations:
     - de.lr-projects.description=File sharing and collaboration
@@ -19,6 +21,7 @@ services:
     - traefik.docker.network=frontend
     - traefik.http.services.nextcloud.loadbalancer.server.port=80
     - com.centurylinklabs.watchtower.enable=true
+    - com.centurylinklabs.watchtower.depend-on=nextcloud
     env_file: .env
     environment:
     - MYSQL_HOST=database

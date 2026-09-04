@@ -1,0 +1,46 @@
+services:
+  t3-code:
+    build: .
+    container_name: t3-code-server
+    restart: unless-stopped
+    environment:
+      - T3CODE_HOST=0.0.0.0
+      - T3CODE_PORT=8080
+      - T3CODE_NO_BROWSER=true
+      - GH_TOKEN=${GITHUB_SECRET}
+    volumes:
+      - ./workspace:/workspace
+      - ./t3-data:/root/.t3
+      - ./codex-data:/root/.codex
+      - ./codex-data-eli:/root/.codex_p
+      - ./mise-data:/opt/mise
+      - ./skills/install-dependencies:/root/.agents/skills/install-dependencies
+    networks:
+      - frontend
+    env_file: .env
+    labels:
+      # Traefik configuration
+      - traefik.enable=true
+      - traefik.docker.network=frontend
+      - traefik.http.routers.t3code.rule=Host(`code.medion.lr-projects.de`)
+      - traefik.http.routers.t3code.entrypoints=websecure
+      - traefik.http.routers.t3code.tls=true
+      - traefik.http.routers.t3code.tls.certresolver=cloudflare
+      - traefik.http.routers.t3code.service=t3code-svc
+      - traefik.http.services.t3code-svc.loadbalancer.server.port=8080
+
+      # Watchtower
+      - com.centurylinklabs.watchtower.enable=true
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+networks:
+  frontend:
+    external: true
