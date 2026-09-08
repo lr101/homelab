@@ -8,12 +8,13 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | ✅ | ✅ | - |
+| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | - | ✅ | - |
 | **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | ✅ | ✅ | - |
 | **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Mariadb | - | `3306` | ✅ | ✅ | - |
 | **iwi_bulletinboard** | App | - | - | - | ✅ | - |
 | **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de) | - | ✅ | manual | - |
+|  | Rustfs | [minio](https://minio.lr-projects.de), [s3-admin](https://s3-admin.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 |  | Stick It Web | [stick-it-web](https://stick-it-web.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 | **postgis** | Db | - | - | ✅ | ✅ | - |
 | **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
@@ -30,6 +31,11 @@ This repository contains setup templates and configuration files for various app
 | **actual-budget** | Actual Server | [budget](https://budget.medion.lr-projects.de) | - | - | ✅ | - |
 | **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
 |  | Adguard Exporter | - | - | ✅ | ✅ | - |
+| **hiring_scraper** | Web | [jobs](https://jobs.medion.lr-projects.de) | - | - | manual | - |
+|  | Worker | - | - | - | manual | - |
+|  | Scheduler | - | - | - | manual | - |
+|  | Db | - | - | - | manual | - |
+|  | Redis | - | - | - | manual | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Immich Machine Learning | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
@@ -44,9 +50,10 @@ This repository contains setup templates and configuration files for various app
 |  | Elasticsearch | - | - | ✅ | manual | - |
 |  | Database | - | - | ✅ | ✅ | - |
 |  | Redis | - | - | ✅ | ✅ | - |
-|  | Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
+|  | Euro Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
+| **t3-code** | T3 Code | [code](https://code.medion.lr-projects.de) | - | - | ✅ | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
 | **backup** | Autorestic | - | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |

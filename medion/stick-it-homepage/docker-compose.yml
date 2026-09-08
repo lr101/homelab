@@ -13,7 +13,6 @@ services:
     - traefik.http.routers.stick-it-home.entrypoints=websecure
     - traefik.http.routers.stick-it-home.tls=true
     - traefik.http.routers.stick-it-home.tls.certresolver=cloudflare
-    - traefik.http.services.stick-it-home.loadbalancer.server.port=3000
     - traefik.docker.network=frontend
     networks:
     - frontend

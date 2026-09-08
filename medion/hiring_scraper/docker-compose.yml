@@ -1,0 +1,89 @@
+name: hiring-scraper
+
+x-app: &app
+  image: ghcr.io/lr101/hiring-scraper:latest
+  pull_policy: always
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://jobs:${POSTGRES_PASSWORD}@db:5432/jobs
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - backend
+
+services:
+  web:
+    <<: *app
+    command: ["/app/docker/start-web.sh"]
+    networks:
+      - frontend
+      - backend
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=frontend
+      - traefik.http.routers.hiring-scraper.rule=Host(`jobs.medion.lr-projects.de`)
+      - traefik.http.routers.hiring-scraper.entrypoints=websecure
+      - traefik.http.routers.hiring-scraper.tls=true
+      - traefik.http.routers.hiring-scraper.tls.certresolver=cloudflare
+      - traefik.http.routers.hiring-scraper.service=hiring-scraper-svc
+      - traefik.http.services.hiring-scraper-svc.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker:
+    <<: *app
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO"]
+
+  scheduler:
+    <<: *app
+    command: ["celery", "-A", "config", "beat", "--loglevel=INFO"]
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jobs
+      POSTGRES_USER: jobs
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobs -d jobs"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  backend:
+  frontend:
+    external: true
+
