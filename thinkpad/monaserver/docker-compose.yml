@@ -9,6 +9,10 @@ services:
     - ./.env
     networks:
     - frontend
+    - postgis
+    depends_on:
+      rustfs:
+        condition: service_healthy
     labels:
     - traefik.enable=true
     - traefik.http.routers.stick-it.rule=Host(`stick-it.thinkpad.lr-projects.de`)
@@ -39,7 +43,7 @@ services:
     env_file: .env
     labels:
     - traefik.enable=true
-    - "traefik.http.routers.rustfs.rule=Host(`minio.lr-projects.de`) || HostRegexp(`{bucket:.+}.minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"
+    - "traefik.http.routers.rustfs.rule=Host(`minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"
     - traefik.http.routers.rustfs.entrypoints=websecure
     - traefik.http.routers.rustfs.tls=true
     - traefik.http.routers.rustfs.tls.certresolver=cloudflare
@@ -52,16 +56,21 @@ services:
     - traefik.http.services.rustfs-admin-srv.loadbalancer.server.port=9001
     - traefik.http.routers.rustfs-admin.service=rustfs-admin-srv
     - traefik.docker.network=frontend
-    environment:
-    - RUSTFS_ACCESS_KEY=${MINIO_ACCESS_KEY}
-    - RUSTFS_SECRET_KEY=${MINIO_SECRET_KEY}
-    - RUSTFS_SERVER_DOMAINS=${MINIO_ENDPOINT}
     command: server /data --address ":9000" --console-address ":9001"
     restart: always
-
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -sf http://localhost:9000/minio/health/live
+          || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
 
   stick-it-web:
-    image: ghcr.io/lr101/stick-it:main
+    image: ghcr.io/lr101/stick-it-web:snapshot
     container_name: stick-it-web
     restart: unless-stopped
     networks:
@@ -89,4 +98,6 @@ services:
   
 networks:
   frontend:
+    external: true
+  postgis:
     external: true
