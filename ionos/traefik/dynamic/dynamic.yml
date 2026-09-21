@@ -107,7 +107,7 @@ http:
       loadBalancer:
         servers:
           - url: "https://nextcloud.medion.lr-projects.de"
-        passHostHeader: false
+        passHostHeader: true
 
     office-service:
       loadBalancer:

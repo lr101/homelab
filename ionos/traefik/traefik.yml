@@ -13,20 +13,17 @@ entryPoints:
     http:
       middlewares:
         - crowdsec@file
-    forwardedHeaders:
-      trustedIPs:
-        - "127.0.0.1/32"
-        - "172.21.0.0/16"
-        - "10.217.236.0/24"
-        - "192.168.0.0/16"
 
 providers:
   file:
     directory: /etc/traefik/dynamic
     watch: true
+  docker:
+    exposedByDefault: false
+    network: frontend
 
 log:
-  level: DEBUG
+  level: INFO
 
 accesslog:
   filepath: /logs/access.log
@@ -53,4 +50,4 @@ experimental:
       version: "v0.18.0"
     bouncer:
       moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
-      version: "v1.5.1"
+      version: "v1.6.0"

@@ -53,7 +53,6 @@ This repository contains setup templates and configuration files for various app
 |  | Euro Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
 | **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
 | **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
-| **t3-code** | T3 Code | [code](https://code.medion.lr-projects.de) | - | - | ✅ | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
 | **backup** | Autorestic | - | - | - | ✅ | - |
 | **telegraf** | Telegraf | - | - | - | ✅ | - |

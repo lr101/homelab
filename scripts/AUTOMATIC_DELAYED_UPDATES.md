@@ -10,8 +10,8 @@ Automatic updates for Debian and Fedora with a 4-day quarantine for non-security
 
 Install
 
-chmod +x setup-delayed-upgrades.py
-sudo ./setup-delayed-upgrades.py
+chmod +x setup-delayed-updates.py
+sudo ./setup-delayed-updates.py
 
 The script installs and configures all required packages, services and timers.
 
@@ -37,8 +37,6 @@ Non-security updates are checked daily. Security updates are handled separately 
 State is stored in "/var/lib/delayed-upgrades/state.json".
 
 Uninstall
-
-Remove the delayed updater:
 
 sudo systemctl disable --now delayed-upgrades.timer
 sudo rm -f /etc/systemd/system/delayed-upgrades.{service,timer}
