@@ -1,0 +1,42 @@
+services:
+  reverse-proxy:
+    image: traefik:v3
+    container_name: traefik
+    ports:
+    - 80:80
+    - 443:443
+    env_file: .env
+    labels:
+    - traefik.enable=true
+    - traefik.docker.network=frontend
+    - traefik.http.routers.traefik-dash.rule=Host(`traefik.dell.lr-projects.de`)
+    - traefik.http.routers.traefik-dash.entrypoints=websecure
+    - traefik.http.routers.traefik-dash.tls=true
+    - traefik.http.routers.traefik-dash.tls.certresolver=cloudflare
+    - traefik.http.routers.traefik-dash.service=api@internal
+    - com.centurylinklabs.watchtower.enable=true
+    annotations:
+    - de.lr-projects.description=Reverse Proxy (with https)
+    - de.lr-projects.sso=true
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ./config/traefik.yaml:/etc/traefik/traefik.yaml:ro
+    - ./dynamic:/etc/traefik/dynamic:ro
+    - ./certs:/var/traefik/certs
+    - ./logs:/logs
+    restart: unless-stopped
+    extra_hosts:
+    - "host.docker.internal:host-gateway"
+    networks:
+    - frontend
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+networks:
+  frontend:
+    external: true

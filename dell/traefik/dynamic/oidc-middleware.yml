@@ -1,0 +1,11 @@
+http:
+  middlewares:
+    oidc-auth:
+      plugin:
+        traefik-oidc-auth:
+          Secret: ${SECRET_SALT}
+          Provider:
+            Url: "https://sso.lr-projects.de"
+            ClientId: ${CLIENT_ID}
+            ClientSecret: ${CLIENT_SECRET}
+          Scopes: ["openid", "profile", "email"]
