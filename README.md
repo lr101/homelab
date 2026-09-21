@@ -71,6 +71,14 @@ This repository contains setup templates and configuration files for various app
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
 
+### Dell
+
+| Group | Name  | Domain | Ports | Backup | Update | SSO |
+| :--- | :---  | :----- | :--- | :----: | :----: | :--: |
+| **t3-code** | T3 Code | [code](https://code.dell.lr-projects.de) | - | - | ✅ | - |
+| **traefik** | Reverse Proxy | [traefik](https://traefik.dell.lr-projects.de) | `443, 80` | - | ✅ | ✅ |
+
+
 
 
 ## Homelab setup
