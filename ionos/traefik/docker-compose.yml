@@ -21,6 +21,7 @@ services:
     - ./dynamic:/etc/traefik/dynamic
     - ./certificates:/etc/traefik/certificates
     - ./traefik-logs:/logs
+    - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
       resources:
         limits:
@@ -48,8 +49,8 @@ services:
     - ./crowdsec/data:/var/lib/crowdsec/data
     - ./crowdsec/etc:/etc/crowdsec
     - ./traefik-logs:/var/log/traefik:ro
-    - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
-    - ./crowdsec/allowlist:/etc/crowdsec/parsers/s02-enrich:ro
+    - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
+    - ./crowdsec/allowlist:/etc/crowdsec/parsers/s02-enrich
     deploy:
       resources:
         limits:
