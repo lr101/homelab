@@ -13,9 +13,8 @@ This repository contains setup templates and configuration files for various app
 | **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Mariadb | - | `3306` | ✅ | ✅ | - |
 | **iwi_bulletinboard** | App | - | - | - | ✅ | - |
-| **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de) | - | ✅ | manual | - |
+| **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de), [stick-it-admin](https://stick-it-admin.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 |  | Rustfs | [minio](https://minio.lr-projects.de), [s3-admin](https://s3-admin.thinkpad.lr-projects.de) | - | ✅ | manual | - |
-|  | Stick It Web | [stick-it-web](https://stick-it-web.thinkpad.lr-projects.de) | - | ✅ | manual | - |
 | **postgis** | Db | - | - | ✅ | ✅ | - |
 | **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.thinkpad.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
