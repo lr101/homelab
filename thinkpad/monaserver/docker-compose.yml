@@ -1,63 +1,83 @@
 services:
   stick-it-server:
-    image: ghcr.io/lr101/stick-it-server-go:snapshot
+    image: ghcr.io/lr101/monaserver-app:latest
     container_name: stick-it-server
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
-    - ./firebase-token.json:/app/firebase-token.json
+      - ./firebase-token.json:/app/firebase-token.json:ro
     env_file:
-    - ./.env
+      - ./.env
     networks:
-    - frontend
-    - postgis
+      - frontend
+      - postgis
     depends_on:
       rustfs:
         condition: service_healthy
     labels:
-    - traefik.enable=true
-    - traefik.http.routers.stick-it.rule=Host(`stick-it.thinkpad.lr-projects.de`)
-    - traefik.http.routers.stick-it.entrypoints=websecure
-    - traefik.http.routers.stick-it.tls=true
-    - traefik.http.routers.stick-it.tls.certresolver=cloudflare
-    - traefik.http.services.stick-it.loadbalancer.server.port=8080
-    - traefik.docker.network=frontend
+      - traefik.enable=true
+      - traefik.docker.network=frontend
+
+      # Public Flutter web app and its same-origin consumer API
+      - "traefik.http.routers.stick-it-web.rule=Host(`stick-it.thinkpad.lr-projects.de`)"
+      - traefik.http.routers.stick-it-web.entrypoints=websecure
+      - traefik.http.routers.stick-it-web.tls=true
+      - traefik.http.routers.stick-it-web.tls.certresolver=cloudflare
+      - traefik.http.routers.stick-it-web.service=stick-it-web
+      - traefik.http.services.stick-it-web.loadbalancer.server.port=8081
+
+      # Private admin UI; the Go API itself has no Traefik route
+      - "traefik.http.routers.stick-it-admin.rule=Host(`stick-it-admin.thinkpad.lr-projects.de`)"
+      - traefik.http.routers.stick-it-admin.entrypoints=websecure
+      - traefik.http.routers.stick-it-admin.tls=true
+      - traefik.http.routers.stick-it-admin.tls.certresolver=cloudflare
+      - traefik.http.routers.stick-it-admin.service=stick-it-admin
+      - traefik.http.services.stick-it-admin.loadbalancer.server.port=8083
     annotations:
-    - de.lr-projects.description=Stick It backend
-    - de.lr-projects.sso=false
+      - de.lr-projects.description=Stick It app, API and admin UI
+      - de.lr-projects.sso=false
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 1G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
 
   rustfs:
     image: rustfs/rustfs:latest
     container_name: rustfs
-    volumes:
-      - ./minio:/data  # Altes MinIO-Verzeichnis mounten
-    networks:
-    - frontend
-    env_file: .env
-    labels:
-    - traefik.enable=true
-    - "traefik.http.routers.rustfs.rule=Host(`minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"
-    - traefik.http.routers.rustfs.entrypoints=websecure
-    - traefik.http.routers.rustfs.tls=true
-    - traefik.http.routers.rustfs.tls.certresolver=cloudflare
-    - traefik.http.services.rustfs-srv.loadbalancer.server.port=9000
-    - traefik.http.routers.rustfs.service=rustfs-srv
-    - traefik.http.routers.rustfs-admin.rule=Host(`s3-admin.thinkpad.lr-projects.de`)
-    - traefik.http.routers.rustfs-admin.entrypoints=websecure
-    - traefik.http.routers.rustfs-admin.tls=true
-    - traefik.http.routers.rustfs-admin.tls.certresolver=cloudflare
-    - traefik.http.services.rustfs-admin-srv.loadbalancer.server.port=9001
-    - traefik.http.routers.rustfs-admin.service=rustfs-admin-srv
-    - traefik.docker.network=frontend
-    command: server /data --address ":9000" --console-address ":9001"
     restart: always
+    volumes:
+      - ./minio:/data # Existing MinIO data directory
+    networks:
+      - frontend
+    env_file:
+      - ./.env
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.rustfs.rule=Host(`minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"
+      - traefik.http.routers.rustfs.entrypoints=websecure
+      - traefik.http.routers.rustfs.tls=true
+      - traefik.http.routers.rustfs.tls.certresolver=cloudflare
+      - traefik.http.services.rustfs-srv.loadbalancer.server.port=9000
+      - traefik.http.routers.rustfs.service=rustfs-srv
+
+      # Keep the RustFS console on the private Traefik entrypoint
+      - "traefik.http.routers.rustfs-admin.rule=Host(`s3-admin.thinkpad.lr-projects.de`)"
+      - traefik.http.routers.rustfs-admin.entrypoints=websecure
+
+      - traefik.http.routers.rustfs-admin.tls=true
+      - traefik.http.routers.rustfs-admin.tls.certresolver=cloudflare
+      - traefik.http.services.rustfs-admin-srv.loadbalancer.server.port=9001
+      - traefik.http.routers.rustfs-admin.service=rustfs-admin-srv
+      - traefik.docker.network=frontend
+    command: server /data --address ":9000" --console-address ":9001"
     healthcheck:
       test:
         - CMD-SHELL
@@ -69,33 +89,6 @@ services:
       retries: 15
       start_period: 10s
 
-  stick-it-web:
-    image: ghcr.io/lr101/stick-it-web:snapshot
-    container_name: stick-it-web
-    restart: unless-stopped
-    networks:
-    - frontend
-    labels:
-    - traefik.enable=true
-    - traefik.http.routers.stick-it-web.rule=Host(`stick-it-web.thinkpad.lr-projects.de`)
-    - traefik.http.routers.stick-it-web.entrypoints=websecure
-    - traefik.http.routers.stick-it-web.tls=true
-    - traefik.http.routers.stick-it-web.tls.certresolver=cloudflare
-    - traefik.http.services.stick-it-web.loadbalancer.server.port=80
-    - traefik.docker.network=frontend
-    annotations:
-    - de.lr-projects.description=Stick It Web app
-    - de.lr-projects.sso=false
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 200M
-        reservations:
-          cpus: '0.1'
-          memory: 100M
-
-  
 networks:
   frontend:
     external: true
