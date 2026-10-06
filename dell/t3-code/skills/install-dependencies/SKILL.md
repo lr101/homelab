@@ -1,6 +1,6 @@
 ---
 name: install-dependencies
-description: Install missing development runtimes, CLI tools, project dependencies, or system libraries in this development container. Prefer mise for runtimes and developer tools, project package managers for application dependencies, and apt only for OS-level packages.
+description: Use when installing a missing runtime, CLI tool, project dependency, or system package.
 ---
 
 # Install Dependencies

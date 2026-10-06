@@ -1,0 +1,45 @@
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+api:
+  dashboard: true
+  insecure: false
+entryPoints:
+  web:
+    address: :80
+  websecure:
+    address: :443
+    forwardedHeaders:
+      trustedIPs:
+        - "10.217.236.0/32"
+        - "10.217.236.1/32"
+    transport:
+      respondingTimeouts:
+        readTimeout: 600s
+        idleTimeout: 600s
+        writeTimeout: 600s
+log:
+  level: DEBUG
+providers:
+  docker:
+    exposedByDefault: false
+    endpoint: "unix:///var/run/docker.sock"
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+certificatesResolvers:
+  cloudflare:
+    acme:
+      email: lukasr101@proton.me
+      storage: /var/traefik/certs/cloudflare-acme.json
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
+        delayBeforeCheck: 0
+experimental:
+  plugins:
+    traefik-oidc-auth:
+      moduleName: "github.com/sevensolutions/traefik-oidc-auth"
+      version: "v0.16.0"

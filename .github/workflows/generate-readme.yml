@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -35,7 +35,7 @@ jobs:
           pip install pyyaml
 
       - name: Generate README
-        run: python scripts/generate_readme.py thinkpad medion ionos
+        run: python scripts/generate_readme.py thinkpad medion ionos dell
 
       - name: Check if README changed
         id: readme-diff

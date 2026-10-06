@@ -22,12 +22,18 @@ services:
       # Traefik configuration
       - traefik.enable=true
       - traefik.docker.network=frontend
-      - traefik.http.routers.t3code.rule=Host(`code.medion.lr-projects.de`)
+      - traefik.http.routers.t3code.rule=Host(`code.dell.lr-projects.de`)
       - traefik.http.routers.t3code.entrypoints=websecure
       - traefik.http.routers.t3code.tls=true
       - traefik.http.routers.t3code.tls.certresolver=cloudflare
       - traefik.http.routers.t3code.service=t3code-svc
       - traefik.http.services.t3code-svc.loadbalancer.server.port=8080
+      - traefik.http.routers.dev-worktrees.rule=HostRegexp(`^.+\.dev\.dell\.lr-projects\.de$`)
+      - traefik.http.routers.dev-worktrees.entrypoints=websecure
+      - traefik.http.routers.dev-worktrees.tls=true
+      - traefik.http.routers.dev-worktrees.service=dev-worktrees
+      - traefik.http.services.dev-worktrees.loadbalancer.server.port=18080
+      - traefik.http.routers.dev-worktrees.tls.certresolver=cloudflare
 
       # Watchtower
       - com.centurylinklabs.watchtower.enable=true
@@ -35,11 +41,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 4G
+          cpus: '8'
+          memory: 8G
         reservations:
-          cpus: '0.1'
-          memory: 256M
+          cpus: '2'
+          memory: 1G
 
 networks:
   frontend:
