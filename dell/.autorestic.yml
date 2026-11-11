@@ -1,0 +1,29 @@
+version: 2
+backends:
+  local:
+    type: local
+    path: /backup
+  nas:
+    type: sftp
+    path: nas:/backup_dell
+global:
+  forget:
+    keep-last: 5
+    keep-daily: 7
+    keep-weekly: 4
+    keep-monthly: 12
+locations:
+  t3-code:
+    from:
+    - ./t3-code
+    to:
+    - local
+    - nas
+    forget: prune
+  traefik:
+    from:
+    - ./traefik
+    to:
+    - local
+    - nas
+    forget: prune

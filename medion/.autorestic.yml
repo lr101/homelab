@@ -1,5 +1,4 @@
 version: 2
-
 backends:
   local:
     type: local
@@ -7,8 +6,6 @@ backends:
   nas:
     type: sftp
     path: nas:/backup_medion
-
-
 global:
   forget:
     keep-last: 5
@@ -16,12 +13,9 @@ global:
     keep-weekly: 4
     keep-monthly: 12
     keep-yearly: 7
-
-
 monitors:
   stats:
     type: influx
-
 locations:
   docker-tags:
     from:
@@ -34,10 +28,10 @@ locations:
     forget: prune
     hooks:
       before: /hooks/docker-tags-hook.sh
-
   immich:
     from:
     - ./immich-app
+    - /external/immich-upload
     to:
     - local
     - nas
@@ -50,7 +44,11 @@ locations:
         - '*/postgres/*'
         - '*/library/thumbs/*'
         - '*/library/encoded-video/*'
-  
+    hooks:
+      before:
+      - python3 /hooks/backup_dump.py /data/immich-app/.backup/immich.dump docker
+        exec -u postgres immich_postgres sh -c 'exec pg_dump -U "$POSTGRES_USER" -Fc
+        "$POSTGRES_DB"'
   jellyfin:
     from:
     - ./jellyfin
@@ -59,7 +57,6 @@ locations:
     - nas
     monitors:
     - stats
-
   logging:
     from:
     - ./logging
@@ -75,7 +72,6 @@ locations:
         - '*/influx_backup/*'
         - '*/influx/influx_data/*'
         - '*/prometheus/data/*'
-
   nextcloud:
     from:
     - ./nextcloud
@@ -91,11 +87,12 @@ locations:
         - '*/elasticsearch_data/*'
     hooks:
       before:
-      - docker exec nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --on
-      - python3 /hooks/mariadb-hook.py nextcloud-database-1 nextcloud --folder nextcloud
+      - docker exec -u www-data nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --on
+      - python3 /hooks/mariadb-hook.py nextcloud-database-1 nextcloud --folder /data/nextcloud
       after:
-      - docker exec nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --off
-
+      - docker exec -u www-data nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --off
+      failure:
+      - docker exec -u www-data nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --off
   pocketid:
     from:
     - ./pocket-id
@@ -105,7 +102,6 @@ locations:
     forget: prune
     monitors:
     - stats
-
   stick-it-homepage:
     from:
     - ./stick-it-homepage
@@ -115,7 +111,6 @@ locations:
     forget: prune
     monitors:
     - stats
-
   traefik:
     from:
     - ./traefik
@@ -125,7 +120,6 @@ locations:
     forget: prune
     monitors:
     - stats
-    
   adguard:
     from:
     - ./adguard
@@ -135,3 +129,33 @@ locations:
     forget: prune
     monitors:
     - stats
+  actual-budget:
+    from:
+    - ./actual-budget
+    to:
+    - local
+    - nas
+    monitors:
+    - stats
+    forget: prune
+    hooks:
+      before:
+      - docker stop budget
+      after:
+      - docker start budget
+      failure:
+      - docker start budget
+  hiring_scraper:
+    from:
+    - ./hiring_scraper
+    to:
+    - local
+    - nas
+    monitors:
+    - stats
+    forget: prune
+    hooks:
+      before:
+      - python3 /hooks/backup_dump.py /data/hiring_scraper/.backup/jobs.dump docker
+        exec -u postgres hiring-scraper-db-1 sh -c 'exec pg_dump -U "$POSTGRES_USER"
+        -Fc "$POSTGRES_DB"'

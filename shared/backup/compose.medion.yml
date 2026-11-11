@@ -1,0 +1,5 @@
+services:
+  autorestic:
+    volumes:
+      # Match UPLOAD_LOCATION in medion/immich-app/.env exactly.
+      - ${IMMICH_UPLOAD_LOCATION:?Set the absolute Immich UPLOAD_LOCATION}:/external/immich-upload:ro

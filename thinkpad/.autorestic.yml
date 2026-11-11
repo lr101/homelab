@@ -57,7 +57,7 @@ locations:
     forget: prune
     hooks:
       before:
-      - python3 /hooks/mariadb-hook.py mariadb homeassistant --folder ha
+      - python3 /hooks/mariadb-hook.py mariadb homeassistant --folder /data/ha
   
   monaserver:
     from:
@@ -68,7 +68,7 @@ locations:
     forget: prune
     hooks:
       before:
-      - python3 /hooks/postgres-hook.py stick-it-db postgres stickitprod --backup-dir monaserver/.backup
+      - python3 /hooks/postgres-hook.py stick-it-db postgres stickitprod --backup-dir /data/monaserver/.backup
     monitors:
     - stats
   
@@ -83,7 +83,7 @@ locations:
     forget: prune
     hooks:
       before:
-      - python3 /hooks/postgres-hook.py stick-it-db postgres tempserver --backup-dir postgis/.backup
+      - python3 /hooks/postgres-hook.py stick-it-db postgres tempserver --backup-dir /data/postgis/.backup
     options:
       backup:
         exclude:

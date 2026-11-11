@@ -68,9 +68,21 @@ def get_watchtower_info(service_data: Dict) -> str:
         label_str = str(label)
         if 'com.centurylinklabs.watchtower.enable' in label_str:
             if 'false' not in label_str:
-                return "✅"
+                return "monitored"
     
     return "manual"
+
+
+def get_sso_status(service_data: Dict) -> str:
+    """Report explicit proxy OIDC separately from declared application SSO."""
+    labels = service_data.get('labels', [])
+    if isinstance(labels, dict):
+        labels = [f"{key}={value}" for key, value in labels.items()]
+    if any('.middlewares=' in str(label) and
+           'oidc-auth@file' in str(label).split('=', 1)[-1].split(',') for label in labels):
+        return "proxy"
+    declared = extract_annotation(service_data.get('annotations', []), 'sso')
+    return "app (declared)" if declared and declared.lower() == 'true' else "-"
 
 
 def parse_autorestic(device: str) -> Dict[str, list]:
@@ -105,8 +117,8 @@ def parse_autorestic(device: str) -> Dict[str, list]:
 def get_backup_status(folder: str, folder_to_backends: Dict[str, list]) -> str:
     """Get backup status by checking if folder is in autorestic config."""
     # Check if this folder is in any autorestic location
-    if folder in folder_to_backends:
-        return "✅"
+    if folder_to_backends.get(folder):
+        return "configured"
     return "-"
 
 
@@ -172,7 +184,6 @@ def process_device(device: str) -> Tuple[str, List[Dict]]:
                     if not deployed_on or device not in [d.strip() for d in deployed_on.split(',')]:
                         continue
 
-                sso = extract_annotation(annotations, 'sso')
                 
                 services_data.append({
                     'group': service_dir.name,
@@ -181,7 +192,7 @@ def process_device(device: str) -> Tuple[str, List[Dict]]:
                     'ports': extract_ports(service_data),  # New field
                     'backup': get_backup_status(service_dir.name, folder_to_backends),
                     'update': get_watchtower_info(service_data),
-                    'sso': "✅" if sso and sso.lower() == "true" else "-",
+                    'sso': get_sso_status(service_data),
                 })
 
     process_dir(device_path)

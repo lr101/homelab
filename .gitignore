@@ -5,3 +5,5 @@ swarm/**
 **/.autorestic.env
 **/.autorestic.yml.old
 **/.restore
+**/__pycache__/
+*.py[cod]
