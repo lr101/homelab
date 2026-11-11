@@ -1,5 +1,7 @@
 # Backup
 
+See [operations and rollout](../../docs/OPERATIONS.md) before deploying. Medion requires the `compose.medion.yml` override to include the actual Immich photo library. A declared backup plan is not a verified restore.
+
 This folder contains the deployment files and other utilise to easily setup backups for the different devices it is used on. The different services in the homelab_templates repository are already split by the hardware devices they are running on (for example the thinkpad or medion laptops). In every of these directories lies an ´autorestic.yml´ file which details the backup plan (keeping to the 3-2-1 rule). The [docker-compose.yml](./docker-compose.yml) file in this directory is the back-up software and configuration that then execute the backup plans. For this *autorestic* is used.
 
 ## Setup Autorestic

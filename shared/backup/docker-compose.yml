@@ -3,20 +3,19 @@ services:
     image: ghcr.io/lr101/autorestic:latest
     container_name: autorestic
     restart: unless-stopped
-    privileged: true                                # (Optional) Required for certain hooks and file access     
     env_file: .env
     labels:
     - com.centurylinklabs.watchtower.enable=true
     annotations:
       - de.lr-projects.description=Automated backup solution with Restic
-      - de.lr-projects.deployed_on=medion,thinkpad
+      - de.lr-projects.deployed_on=medion,thinkpad,ionos,dell
     environment:
       - TZ=Europe/Berlin                            # Change to your timezone
       - CRON_SCHEDULE=10 2 * * *                    # Cron schedule for backups (default: daily at 02:10)
     volumes:
-      - ${DEVICE_FOLDER_PATH}:/data                 # Path to device-specific .autorestic.yml and content to back up
-      - ${LOCAL_BACKUP_PATH}:/backup                # Path to local backup storage
-      - ${SHARED_FOLDER_PATH}:/shared               # Path to shared files
+      - ${DEVICE_FOLDER_PATH:?Set DEVICE_FOLDER_PATH}:/data                 # Path to device-specific .autorestic.yml and content to back up
+      - ${LOCAL_BACKUP_PATH:?Set LOCAL_BACKUP_PATH}:/backup                # Path to local backup storage
+      - ${SHARED_FOLDER_PATH:?Set SHARED_FOLDER_PATH}:/shared               # Path to shared files
       - ./logs:/var/log/autorestic                  # (Optional) Log files
       - ./hooks:/hooks:ro                           # (Optional) Custom hooks
       - /var/run/docker.sock:/var/run/docker.sock   # (Optional) Required for docker hooks like db backup

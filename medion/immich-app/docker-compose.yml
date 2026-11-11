@@ -7,7 +7,7 @@ services:
       file: hwaccel.transcoding.yml
       service: nvenc
     volumes:
-    - ${UPLOAD_LOCATION}:/usr/src/app/upload
+    - ${UPLOAD_LOCATION:?Set UPLOAD_LOCATION in the service .env}:/usr/src/app/upload
     - /etc/localtime:/etc/localtime:ro
     env_file:
     - .env
@@ -92,12 +92,12 @@ services:
     annotations:
     - de.lr-projects.sso=false
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the service .env}
+      POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in the service .env}
+      POSTGRES_DB: ${DB_DATABASE_NAME:?Set DB_DATABASE_NAME in the service .env}
       POSTGRES_INITDB_ARGS: --data-checksums
     volumes:
-    - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    - ${DB_DATA_LOCATION:?Set DB_DATA_LOCATION in the service .env}:/var/lib/postgresql/data
     shm_size: 128mb
     restart: always
     networks:

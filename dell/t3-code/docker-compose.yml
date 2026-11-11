@@ -24,12 +24,14 @@ services:
       - traefik.docker.network=frontend
       - traefik.http.routers.t3code.rule=Host(`code.dell.lr-projects.de`)
       - traefik.http.routers.t3code.entrypoints=websecure
+      - traefik.http.routers.t3code.middlewares=oidc-auth@file
       - traefik.http.routers.t3code.tls=true
       - traefik.http.routers.t3code.tls.certresolver=cloudflare
       - traefik.http.routers.t3code.service=t3code-svc
       - traefik.http.services.t3code-svc.loadbalancer.server.port=8080
       - traefik.http.routers.dev-worktrees.rule=HostRegexp(`^.+\.dev\.dell\.lr-projects\.de$`)
       - traefik.http.routers.dev-worktrees.entrypoints=websecure
+      - traefik.http.routers.dev-worktrees.middlewares=oidc-auth@file
       - traefik.http.routers.dev-worktrees.tls=true
       - traefik.http.routers.dev-worktrees.service=dev-worktrees
       - traefik.http.services.dev-worktrees.loadbalancer.server.port=18080

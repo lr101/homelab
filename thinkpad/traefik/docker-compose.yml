@@ -3,33 +3,33 @@ services:
     image: traefik:v3
     container_name: traefik
     ports:
-      - "80:80"
-      - "443:443"
+    - 80:80
+    - 443:443
     env_file: .env
     labels:
-      - traefik.enable=true
-      - traefik.docker.network=frontend
-      - traefik.http.routers.traefik-dash.rule=Host(`traefik.thinkpad.lr-projects.de`)
-      - traefik.http.routers.traefik-dash.entrypoints=websecure
-      - traefik.http.routers.traefik-dash.tls=true
-      - traefik.http.routers.traefik-dash.tls.certresolver=cloudflare
-      - traefik.http.routers.traefik-dash.service=api@internal
-      - traefik.http.services.api@internal.loadbalancer.server.port=8080
-      - "com.centurylinklabs.watchtower.enable=true"
-      - traefik.http.routers.traefik-dash.middlewares=oidc-auth@file
+    - traefik.enable=true
+    - traefik.docker.network=frontend
+    - traefik.http.routers.traefik-dash.rule=Host(`traefik.thinkpad.lr-projects.de`)
+    - traefik.http.routers.traefik-dash.entrypoints=websecure
+    - traefik.http.routers.traefik-dash.tls=true
+    - traefik.http.routers.traefik-dash.tls.certresolver=cloudflare
+    - traefik.http.routers.traefik-dash.service=api@internal
+    - traefik.http.services.api@internal.loadbalancer.server.port=8080
+    - com.centurylinklabs.watchtower.enable=true
+    - traefik.http.routers.traefik-dash.middlewares=oidc-auth@file
     annotations:
-      - de.lr-projects.description=Traefik Reverse Proxy
-      - de.lr-projects.sso=true
+    - de.lr-projects.description=Traefik Reverse Proxy
+    - de.lr-projects.sso=true
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./config/traefik.yaml:/etc/traefik/traefik.yaml:ro
-      - ./dynamic:/etc/traefik/dynamic:ro
-      - ./certs:/var/traefik/certs
-      - ./logs:/logs
+    - ./config/traefik.yaml:/etc/traefik/traefik.yaml:ro
+    - ./dynamic:/etc/traefik/dynamic:ro
+    - ./certs:/var/traefik/certs
+    - ./logs:/logs
     restart: unless-stopped
     networks:
-      - frontend
-      - influxdb-network
+    - frontend
+    - influxdb-network
+    - docker-api
     deploy:
       resources:
         limits:
@@ -38,8 +38,32 @@ services:
         reservations:
           cpus: '0.25'
           memory: 256M
+    depends_on:
+      socket-proxy:
+        condition: service_started
+    environment:
+      SECRET_SALT: ${SECRET_SALT:?Set SECRET_SALT in the Traefik .env}
+      CLIENT_ID: ${CLIENT_ID:?Set CLIENT_ID in the Traefik .env}
+      CLIENT_SECRET: ${CLIENT_SECRET:?Set CLIENT_SECRET in the Traefik .env}
+  socket-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: '1'
+      EVENTS: '1'
+      PING: '1'
+      VERSION: '1'
+      POST: '0'
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+    - docker-api
+    security_opt:
+    - no-new-privileges:true
 networks:
   frontend:
     external: true
   influxdb-network:
     external: true
+  docker-api:
+    internal: true

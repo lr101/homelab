@@ -26,9 +26,9 @@ services:
     environment:
     - MYSQL_HOST=database
     - MYSQL_USER=nextcloud
-    - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD}
+    - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD:?Set NEXTCLOUD_DB_PASSWORD in the service .env}
     - MYSQL_DATABASE=nextcloud
-    - REDIS_HOST_PASSWORD=${REDIS_PASSWORD}
+    - REDIS_HOST_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD in the service .env}
     - REDIS_HOST=redis
     depends_on:
     - database
@@ -75,9 +75,9 @@ services:
     networks:
     - backend-nextcloud
     environment:
-    - MYSQL_ROOT_PASSWORD=${NEXTCLOUD_DB_ROOT_PASSWORD}
+    - MYSQL_ROOT_PASSWORD=${NEXTCLOUD_DB_ROOT_PASSWORD:?Set NEXTCLOUD_DB_ROOT_PASSWORD in the service .env}
     - MYSQL_USER=nextcloud
-    - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD}
+    - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD:?Set NEXTCLOUD_DB_PASSWORD in the service .env}
     - MYSQL_DATABASE=nextcloud
     volumes:
     - database:/var/lib/mysql
@@ -98,7 +98,7 @@ services:
       - backend-nextcloud
     image: redis
     restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the service .env}
     annotations:
     - de.lr-projects.description=Nextcloud Redis Cache
     - de.lr-projects.sso=false
@@ -130,7 +130,7 @@ services:
     - de.lr-projects.sso=false
     environment:
       - JWT_ENABLED=true
-      - JWT_SECRET=${JWT_SECRET_OFFICE}
+      - JWT_SECRET=${JWT_SECRET_OFFICE:?Set JWT_SECRET_OFFICE in the service .env}
     deploy:
       resources:
         limits:

@@ -8,18 +8,19 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | - | ✅ | - |
-| **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | ✅ | ✅ | - |
-| **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | ✅ | ✅ | ✅ |
-|  | Mariadb | - | `3306` | ✅ | ✅ | - |
-| **iwi_bulletinboard** | App | - | - | - | ✅ | - |
-| **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de), [stick-it-admin](https://stick-it-admin.thinkpad.lr-projects.de) | - | ✅ | manual | - |
-|  | Rustfs | [minio](https://minio.lr-projects.de), [s3-admin](https://s3-admin.thinkpad.lr-projects.de) | - | ✅ | manual | - |
-| **postgis** | Db | - | - | ✅ | ✅ | - |
-| **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | ✅ | manual | - |
-| **traefik** | Reverse Proxy | [traefik](https://traefik.thinkpad.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
-| **backup** | Autorestic | - | - | - | ✅ | - |
-| **telegraf** | Telegraf | - | - | - | ✅ | - |
+| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | - | monitored | - |
+| **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | configured | monitored | - |
+| **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | configured | monitored | app (declared) |
+|  | Mariadb | - | `3306` | configured | monitored | - |
+| **iwi_bulletinboard** | App | - | - | - | monitored | - |
+| **monaserver** | Stick It Server | [stick-it](https://stick-it.thinkpad.lr-projects.de), [stick-it-admin](https://stick-it-admin.thinkpad.lr-projects.de) | - | configured | manual | - |
+|  | Rustfs | [minio](https://minio.lr-projects.de), [s3-admin](https://s3-admin.thinkpad.lr-projects.de) | - | configured | manual | - |
+| **postgis** | Db | - | - | configured | monitored | - |
+| **tempserver** | Tempserver | [temppi](https://temppi.thinkpad.lr-projects.de) | `8081` | configured | manual | - |
+| **traefik** | Reverse Proxy | [traefik](https://traefik.thinkpad.lr-projects.de) | `443, 80` | configured | monitored | proxy |
+|  | Socket Proxy | - | - | configured | manual | - |
+| **backup** | Autorestic | - | - | - | monitored | - |
+| **telegraf** | Telegraf | - | - | - | monitored | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
 
@@ -27,34 +28,35 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **actual-budget** | Actual Server | [budget](https://budget.medion.lr-projects.de) | - | - | ✅ | - |
-| **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
-|  | Adguard Exporter | - | - | ✅ | ✅ | - |
-| **hiring_scraper** | Web | [jobs](https://jobs.medion.lr-projects.de) | - | - | manual | - |
-|  | Worker | - | - | - | manual | - |
-|  | Scheduler | - | - | - | manual | - |
-|  | Db | - | - | - | manual | - |
-|  | Redis | - | - | - | manual | - |
-| **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
-|  | Immich Machine Learning | - | - | ✅ | ✅ | - |
-|  | Redis | - | - | ✅ | ✅ | - |
-|  | Database | - | - | ✅ | ✅ | - |
-|  | Immich Kiosk | [diashow](https://diashow.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
-| **jellyfin** | Jellyfin | [jellyfin](https://jellyfin.medion.lr-projects.de) | `8096` | ✅ | ✅ | ✅ |
-| **logging** | Influxdb | [influx](https://influx.medion.lr-projects.de) | - | ✅ | ✅ | - |
-|  | Grafana | [grafana](https://grafana.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
-|  | Prometheus | [prometheus](https://prometheus.medion.lr-projects.de) | - | ✅ | ✅ | - |
-|  | Uptime Kuma | [uptime](https://uptime.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
-| **nextcloud** | Nextcloud | [nextcloud](https://nextcloud.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
-|  | Elasticsearch | - | - | ✅ | manual | - |
-|  | Database | - | - | ✅ | ✅ | - |
-|  | Redis | - | - | ✅ | ✅ | - |
-|  | Euro Office | [office](https://office.lr-projects.de) | - | ✅ | ✅ | - |
-| **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | ✅ | ✅ | - |
-| **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | ✅ | manual | - |
-| **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | ✅ | ✅ | ✅ |
-| **backup** | Autorestic | - | - | - | ✅ | - |
-| **telegraf** | Telegraf | - | - | - | ✅ | - |
+| **actual-budget** | Actual Server | [budget](https://budget.medion.lr-projects.de) | - | configured | monitored | - |
+| **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | configured | monitored | proxy |
+|  | Adguard Exporter | - | - | configured | monitored | - |
+| **hiring_scraper** | Web | [jobs](https://jobs.medion.lr-projects.de) | - | configured | manual | - |
+|  | Worker | - | - | configured | manual | - |
+|  | Scheduler | - | - | configured | manual | - |
+|  | Db | - | - | configured | manual | - |
+|  | Redis | - | - | configured | manual | - |
+| **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | configured | monitored | app (declared) |
+|  | Immich Machine Learning | - | - | configured | monitored | - |
+|  | Redis | - | - | configured | monitored | - |
+|  | Database | - | - | configured | monitored | - |
+|  | Immich Kiosk | [diashow](https://diashow.medion.lr-projects.de) | - | configured | monitored | app (declared) |
+| **jellyfin** | Jellyfin | [jellyfin](https://jellyfin.medion.lr-projects.de) | `8096` | configured | monitored | app (declared) |
+| **logging** | Influxdb | [influx](https://influx.medion.lr-projects.de) | - | configured | monitored | - |
+|  | Grafana | [grafana](https://grafana.medion.lr-projects.de) | - | configured | monitored | app (declared) |
+|  | Prometheus | [prometheus](https://prometheus.medion.lr-projects.de) | - | configured | monitored | proxy |
+|  | Uptime Kuma | [uptime](https://uptime.medion.lr-projects.de) | - | configured | monitored | proxy |
+| **nextcloud** | Nextcloud | [nextcloud](https://nextcloud.medion.lr-projects.de) | - | configured | monitored | app (declared) |
+|  | Elasticsearch | - | - | configured | manual | - |
+|  | Database | - | - | configured | monitored | - |
+|  | Redis | - | - | configured | monitored | - |
+|  | Euro Office | [office](https://office.lr-projects.de) | - | configured | monitored | - |
+| **pocket-id** | Pocket Id | [sso](https://sso.medion.lr-projects.de) | - | configured | monitored | - |
+| **stick-it-homepage** | App | [stick-it-home](https://stick-it-home.medion.lr-projects.de) | - | configured | manual | - |
+| **traefik** | Reverse Proxy | [traefik](https://traefik.medion.lr-projects.de) | `443, 80` | configured | monitored | proxy |
+|  | Socket Proxy | - | - | configured | manual | - |
+| **backup** | Autorestic | - | - | - | monitored | - |
+| **telegraf** | Telegraf | - | - | - | monitored | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
 
@@ -62,11 +64,13 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | ✅ | ✅ | ✅ |
-|  | Adguard Exporter | - | - | ✅ | ✅ | - |
-| **traefik** | Traefik | - | `443, 80` | ✅ | ✅ | ✅ |
-|  | Crowdsec | - | - | ✅ | ✅ | - |
-| **telegraf** | Telegraf | - | - | - | ✅ | - |
+| **adguard** | Adguardhome | [dns](https://dns.ionos.lr-projects.de) | `53` | configured | monitored | proxy |
+|  | Adguard Exporter | - | - | configured | monitored | - |
+| **traefik** | Traefik | - | `443, 80` | configured | monitored | app (declared) |
+|  | Crowdsec | - | - | configured | monitored | - |
+|  | Socket Proxy | - | - | configured | manual | - |
+| **backup** | Autorestic | - | - | - | monitored | - |
+| **telegraf** | Telegraf | - | - | - | monitored | - |
 | **watchtower** | Watchtower | - | - | - | manual | - |
 
 
@@ -74,11 +78,17 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **t3-code** | T3 Code | [code](https://code.dell.lr-projects.de) | - | - | ✅ | - |
-| **traefik** | Reverse Proxy | [traefik](https://traefik.dell.lr-projects.de) | `443, 80` | - | ✅ | ✅ |
+| **t3-code** | T3 Code | [code](https://code.dell.lr-projects.de) | - | configured | monitored | proxy |
+| **traefik** | Reverse Proxy | [traefik](https://traefik.dell.lr-projects.de) | `443, 80` | configured | monitored | proxy |
+|  | Socket Proxy | - | - | configured | manual | - |
+| **backup** | Autorestic | - | - | - | monitored | - |
 
 
 
+
+The inventory describes configuration, not live verification. **Backup: configured** means a source folder and destination are declared; external mounts, exclusions, and successful restores still need checking. **Update: monitored** means Watchtower opt-in; the shared Watchtower runs in notification-only mode. **SSO: proxy** means an explicit OIDC middleware label; **app (declared)** is application SSO metadata, not a verified login test.
+
+See [operations and rollout](docs/OPERATIONS.md) for prerequisites, backup coverage, restore drills, and update procedures.
 
 ## Homelab setup
 
@@ -99,7 +109,7 @@ graph TB
     subgraph Ionos["Ionos VPS - Public IP"]
         PublicIP["Public IP Address"]
         WGServer["WireGuard Server"]
-        NginxProxy["Nginx Reverse Proxy"]
+        TraefikProxy["Traefik Reverse Proxy"]
     end
     
     subgraph VPN["🔒 WireGuard VPN Network"]
@@ -110,8 +120,8 @@ graph TB
     end
     
     Users -->|HTTPS| PublicIP
-    PublicIP --> NginxProxy
-    NginxProxy -->|Routes Services| WGServer
+    PublicIP --> TraefikProxy
+    TraefikProxy -->|Routes Services| WGServer
     WGServer -->|Encrypted Tunnel| VPN
     Mobile -.->|VPN Connection| WGServer
 ```

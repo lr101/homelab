@@ -14,10 +14,11 @@ services:
       # Schedule: every night at 03:00
       WATCHTOWER_SCHEDULE: 0 0 3 * * *
 
-      # Remove old images after updating
-      WATCHTOWER_CLEANUP: "true"
+      # Notify only: apply tested updates explicitly after a successful backup.
+      WATCHTOWER_MONITOR_ONLY: "true"
+      WATCHTOWER_CLEANUP: "false"
 
-      # Send notification if major update is available
+      # Send update notifications
       WATCHTOWER_NOTIFICATIONS: "email"
       WATCHTOWER_NOTIFICATION_EMAIL_FROM: info@lr-projects.de
       WATCHTOWER_NOTIFICATION_EMAIL_TO: info@lr-projects.de

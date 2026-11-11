@@ -1,0 +1,49 @@
+name: Validate infrastructure
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - run: pip install -r scripts/requirements.txt
+      - name: Backup and inventory regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Validate Compose models without deployment secrets
+        run: bash scripts/validate-compose.sh
+      - name: Validate backup and Traefik YAML
+        run: |
+          python - <<'PYTHON'
+          from pathlib import Path
+          import re
+          import yaml
+          files = list(Path('.').glob('*/.autorestic.yml')) + list(Path('.').glob('*/traefik/**/*.y*ml'))
+          for path in files:
+              content = path.read_text()
+              if '/dynamic/' in str(path) and re.search(r'\$\{[A-Z_]+\}', content):
+                  raise SystemExit(f'Unrendered environment placeholder: {path}')
+              yaml.safe_load(re.sub(r'\{\{.*?\}\}', 'ci-placeholder', content))
+          print(f'Validated {len(files)} YAML files with template placeholders')
+          PYTHON
+      - name: Check shell syntax
+        run: find . -not -path './.git/*' -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+      - name: Check generated inventory
+        run: |
+          python scripts/generate_readme.py thinkpad medion ionos dell
+          git diff --exit-code README.md
+      - name: Scan checked-in files for secrets
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro"
+          ghcr.io/gitleaks/gitleaks:v8.24.3
+          dir /repo --redact --no-banner
