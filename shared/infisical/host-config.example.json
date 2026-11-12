@@ -1,0 +1,8 @@
+{
+  "host": "medion",
+  "url": "https://secrets.dell.lr-projects.de",
+  "project_id": "replace-with-the-medion-project-id",
+  "environment": "prod",
+  "client_id": "replace-with-the-medion-machine-identity-client-id",
+  "client_secret_file": "/etc/homelab/infisical-medion.client-secret"
+}

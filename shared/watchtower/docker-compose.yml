@@ -4,7 +4,11 @@ services:
     image: nickfedor/watchtower
     container_name: watchtower
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     dns:
       - 1.1.1.1
     environment:

@@ -7,3 +7,11 @@ swarm/**
 **/.restore
 **/__pycache__/
 *.py[cod]
+
+# Infisical materialized files and host bootstrap configuration
+**/.secrets.env
+**/.secrets.*.env
+**/.secrets/
+**/.infisical/
+**/client-secret
+**/secrets.yaml

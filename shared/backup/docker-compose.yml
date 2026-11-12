@@ -3,7 +3,11 @@ services:
     image: ghcr.io/lr101/autorestic:latest
     container_name: autorestic
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     labels:
     - com.centurylinklabs.watchtower.enable=true
     annotations:

@@ -27,3 +27,19 @@ locations:
     - local
     - nas
     forget: prune
+  infisical:
+    from:
+    - ./infisical
+    to:
+    - local
+    - nas
+    forget: prune
+    options:
+      backup:
+        exclude:
+        - '*/postgres/*'
+        - '*/redis/*'
+    hooks:
+      before:
+      - python3 /hooks/backup_dump.py /data/infisical/.backup/infisical.dump docker
+        exec -u postgres infisical-db pg_dump -U infisical -Fc infisical

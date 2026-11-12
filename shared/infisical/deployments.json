@@ -1,0 +1,471 @@
+{
+  "dell": {
+    "t3-code": {
+      "directory": "dell/t3-code",
+      "secret_path": "/dell/t3-code",
+      "env_file": "dell/t3-code/.secrets.env",
+      "required": [
+        "GITHUB_SECRET"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "traefik": {
+      "directory": "dell/traefik",
+      "secret_path": "/dell/traefik",
+      "env_file": "dell/traefik/.secrets.env",
+      "required": [
+        "CF_DNS_API_TOKEN",
+        "CLIENT_ID",
+        "CLIENT_SECRET",
+        "SECRET_SALT"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "CF_DNS_API_TOKEN": "dell/traefik/.secrets/cf_dns_api_token"
+      },
+      "file_only": [
+        "CF_DNS_API_TOKEN"
+      ]
+    },
+    "shared-backup": {
+      "directory": "shared/backup",
+      "secret_path": "/dell/shared/backup",
+      "env_file": "shared/backup/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "dependencies": [
+        "backup-credentials"
+      ]
+    },
+    "shared-telegraf": {
+      "directory": "shared/telegraf",
+      "secret_path": "/dell/shared/telegraf",
+      "env_file": "shared/telegraf/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yaml"
+      ]
+    },
+    "shared-watchtower": {
+      "directory": "shared/watchtower",
+      "secret_path": "/dell/shared/watchtower",
+      "env_file": "shared/watchtower/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "backup-credentials": {
+      "directory": "dell",
+      "secret_path": "/dell/backup-credentials",
+      "required": [
+        "AUTORESTIC_ENV"
+      ],
+      "files": {
+        "AUTORESTIC_ENV": "dell/.autorestic.env"
+      }
+    }
+  },
+  "ionos": {
+    "adguard": {
+      "directory": "ionos/adguard",
+      "secret_path": "/ionos/adguard",
+      "env_file": "ionos/adguard/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "traefik": {
+      "directory": "ionos/traefik",
+      "secret_path": "/ionos/traefik",
+      "env_file": "ionos/traefik/.secrets.env",
+      "required": [
+        "CF_DNS_API_TOKEN",
+        "CLIENT_ID",
+        "CLIENT_SECRET",
+        "SECRET_SALT",
+        "CROWDSEC_BOUNCER_API_KEY"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "CF_DNS_API_TOKEN": "ionos/traefik/.secrets/cf_dns_api_token"
+      },
+      "file_only": [
+        "CF_DNS_API_TOKEN"
+      ]
+    },
+    "shared-backup": {
+      "directory": "shared/backup",
+      "secret_path": "/ionos/shared/backup",
+      "env_file": "shared/backup/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "dependencies": [
+        "backup-credentials"
+      ]
+    },
+    "shared-telegraf": {
+      "directory": "shared/telegraf",
+      "secret_path": "/ionos/shared/telegraf",
+      "env_file": "shared/telegraf/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yaml"
+      ]
+    },
+    "shared-watchtower": {
+      "directory": "shared/watchtower",
+      "secret_path": "/ionos/shared/watchtower",
+      "env_file": "shared/watchtower/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "backup-credentials": {
+      "directory": "ionos",
+      "secret_path": "/ionos/backup-credentials",
+      "required": [
+        "AUTORESTIC_ENV"
+      ],
+      "files": {
+        "AUTORESTIC_ENV": "ionos/.autorestic.env"
+      }
+    }
+  },
+  "medion": {
+    "adguard": {
+      "directory": "medion/adguard",
+      "secret_path": "/medion/adguard",
+      "env_file": "medion/adguard/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "hiring_scraper": {
+      "directory": "medion/hiring_scraper",
+      "secret_path": "/medion/hiring_scraper",
+      "env_file": "medion/hiring_scraper/.secrets.env",
+      "required": [
+        "POSTGRES_PASSWORD"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "POSTGRES_PASSWORD": "medion/hiring_scraper/.secrets/postgres_password"
+      },
+      "file_only": []
+    },
+    "immich-app": {
+      "directory": "medion/immich-app",
+      "secret_path": "/medion/immich-app",
+      "env_file": "medion/immich-app/.secrets.env",
+      "required": [
+        "DB_PASSWORD"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "DB_PASSWORD": "medion/immich-app/.secrets/postgres_password"
+      },
+      "file_only": [],
+      "dependencies": [
+        "immich-kiosk"
+      ]
+    },
+    "immich-kiosk": {
+      "directory": "medion/immich-app",
+      "secret_path": "/medion/immich-app/kiosk",
+      "env_file": "medion/immich-app/.secrets.kiosk.env",
+      "required": []
+    },
+    "logging": {
+      "directory": "medion/logging",
+      "secret_path": "/medion/logging",
+      "env_file": "medion/logging/.secrets.env",
+      "required": [
+        "DOCKER_INFLUXDB_INIT_PASSWORD",
+        "GF_SECURITY_ADMIN_PASSWORD"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "GF_SECURITY_ADMIN_PASSWORD": "medion/logging/.secrets/grafana_admin_password",
+        "GRAFANA_INI": "medion/logging/grafana-config/grafana.ini"
+      },
+      "file_only": [
+        "GF_SECURITY_ADMIN_PASSWORD",
+        "GRAFANA_INI"
+      ]
+    },
+    "nextcloud": {
+      "directory": "medion/nextcloud",
+      "secret_path": "/medion/nextcloud",
+      "env_file": "medion/nextcloud/.secrets.env",
+      "required": [
+        "JWT_SECRET_OFFICE",
+        "NEXTCLOUD_DB_PASSWORD",
+        "NEXTCLOUD_DB_ROOT_PASSWORD",
+        "REDIS_PASSWORD"
+      ],
+      "compose": [
+        "docker-compose.yaml"
+      ],
+      "files": {
+        "NEXTCLOUD_DB_ROOT_PASSWORD": "medion/nextcloud/.secrets/db_root_password",
+        "NEXTCLOUD_DB_PASSWORD": "medion/nextcloud/.secrets/db_password"
+      },
+      "file_only": [
+        "NEXTCLOUD_DB_ROOT_PASSWORD",
+        "NEXTCLOUD_DB_PASSWORD"
+      ]
+    },
+    "pocket-id": {
+      "directory": "medion/pocket-id",
+      "secret_path": "/medion/pocket-id",
+      "env_file": "medion/pocket-id/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "traefik": {
+      "directory": "medion/traefik",
+      "secret_path": "/medion/traefik",
+      "env_file": "medion/traefik/.secrets.env",
+      "required": [
+        "CF_DNS_API_TOKEN",
+        "CLIENT_ID",
+        "CLIENT_SECRET",
+        "SECRET_SALT"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "CF_DNS_API_TOKEN": "medion/traefik/.secrets/cf_dns_api_token"
+      },
+      "file_only": [
+        "CF_DNS_API_TOKEN"
+      ]
+    },
+    "shared-backup": {
+      "directory": "shared/backup",
+      "secret_path": "/medion/shared/backup",
+      "env_file": "shared/backup/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml",
+        "compose.medion.yml"
+      ],
+      "dependencies": [
+        "backup-credentials"
+      ]
+    },
+    "shared-telegraf": {
+      "directory": "shared/telegraf",
+      "secret_path": "/medion/shared/telegraf",
+      "env_file": "shared/telegraf/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yaml"
+      ]
+    },
+    "shared-watchtower": {
+      "directory": "shared/watchtower",
+      "secret_path": "/medion/shared/watchtower",
+      "env_file": "shared/watchtower/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "backup-credentials": {
+      "directory": "medion",
+      "secret_path": "/medion/backup-credentials",
+      "required": [
+        "AUTORESTIC_ENV"
+      ],
+      "files": {
+        "AUTORESTIC_ENV": "medion/.autorestic.env"
+      }
+    }
+  },
+  "thinkpad": {
+    "ha": {
+      "directory": "thinkpad/ha",
+      "secret_path": "/thinkpad/ha",
+      "env_file": "thinkpad/ha/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yaml"
+      ],
+      "files": {
+        "MARIADB_ROOT_PASSWORD": "thinkpad/ha/.secrets/db_root_password",
+        "MARIADB_PASSWORD": "thinkpad/ha/.secrets/db_password",
+        "HOMEASSISTANT_SECRETS_YAML": "thinkpad/ha/config/secrets.yaml"
+      },
+      "file_only": [
+        "HOMEASSISTANT_SECRETS_YAML",
+        "MARIADB_ROOT_PASSWORD",
+        "MARIADB_PASSWORD"
+      ]
+    },
+    "monaserver": {
+      "directory": "thinkpad/monaserver",
+      "secret_path": "/thinkpad/monaserver",
+      "env_file": "thinkpad/monaserver/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "FIREBASE_TOKEN_JSON": "thinkpad/monaserver/.secrets/firebase-token.json"
+      },
+      "file_only": [
+        "FIREBASE_TOKEN_JSON"
+      ]
+    },
+    "postgis": {
+      "directory": "thinkpad/postgis",
+      "secret_path": "/thinkpad/postgis",
+      "env_file": "thinkpad/postgis/.secrets.env",
+      "required": [
+        "PG_PASSWORD"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "PG_PASSWORD": "thinkpad/postgis/.secrets/postgres_password"
+      },
+      "file_only": [
+        "PG_PASSWORD"
+      ]
+    },
+    "tempserver": {
+      "directory": "thinkpad/tempserver",
+      "secret_path": "/thinkpad/tempserver",
+      "env_file": "thinkpad/tempserver/.secrets.env",
+      "required": [
+        "INFLUXDB_TOKEN",
+        "PG_PSW"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "traefik": {
+      "directory": "thinkpad/traefik",
+      "secret_path": "/thinkpad/traefik",
+      "env_file": "thinkpad/traefik/.secrets.env",
+      "required": [
+        "CF_DNS_API_TOKEN",
+        "CLIENT_ID",
+        "CLIENT_SECRET",
+        "SECRET_SALT"
+      ],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "files": {
+        "CF_DNS_API_TOKEN": "thinkpad/traefik/.secrets/cf_dns_api_token"
+      },
+      "file_only": [
+        "CF_DNS_API_TOKEN"
+      ]
+    },
+    "shared-backup": {
+      "directory": "shared/backup",
+      "secret_path": "/thinkpad/shared/backup",
+      "env_file": "shared/backup/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ],
+      "dependencies": [
+        "backup-credentials"
+      ]
+    },
+    "shared-telegraf": {
+      "directory": "shared/telegraf",
+      "secret_path": "/thinkpad/shared/telegraf",
+      "env_file": "shared/telegraf/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yaml"
+      ]
+    },
+    "shared-watchtower": {
+      "directory": "shared/watchtower",
+      "secret_path": "/thinkpad/shared/watchtower",
+      "env_file": "shared/watchtower/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "backup-credentials": {
+      "directory": "thinkpad",
+      "secret_path": "/thinkpad/backup-credentials",
+      "required": [
+        "AUTORESTIC_ENV"
+      ],
+      "files": {
+        "AUTORESTIC_ENV": "thinkpad/.autorestic.env"
+      }
+    },
+    "garage": {
+      "directory": "thinkpad/garage",
+      "secret_path": "/thinkpad/garage",
+      "required": [
+        "GARAGE_CONFIG_TOML"
+      ],
+      "files": {
+        "GARAGE_CONFIG_TOML": "thinkpad/garage/config/garage.toml"
+      },
+      "compose": [
+        "docker-compose.yml"
+      ]
+    },
+    "iwi_bulletinboard": {
+      "directory": "thinkpad/iwi_bulletinboard",
+      "secret_path": "/thinkpad/iwi_bulletinboard",
+      "required": [
+        "IWI_SECRET_JSON"
+      ],
+      "files": {
+        "IWI_SECRET_JSON": "thinkpad/iwi_bulletinboard/.secrets/secret.json"
+      },
+      "compose": [
+        "docker-compose.yml"
+      ]
+    }
+  },
+  "synology": {
+    "telegraf": {
+      "directory": "synology/telegraf",
+      "secret_path": "/synology/telegraf",
+      "env_file": "synology/telegraf/.secrets.env",
+      "required": [],
+      "compose": [
+        "docker-compose.yaml"
+      ]
+    }
+  }
+}

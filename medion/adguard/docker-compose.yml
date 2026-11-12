@@ -41,7 +41,11 @@ services:
     networks:
     - adguard
     - influxdb-network
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     annotations:
     - de.lr-projects.sso=false
     - de.lr-projects.description=AdGuard Home metrics exporter

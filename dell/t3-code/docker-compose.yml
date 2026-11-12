@@ -17,7 +17,11 @@ services:
       - ./skills/install-dependencies:/root/.agents/skills/install-dependencies
     networks:
       - frontend
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     labels:
       # Traefik configuration
       - traefik.enable=true

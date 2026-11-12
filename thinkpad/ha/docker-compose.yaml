@@ -33,9 +33,12 @@ services:
     image: mariadb:12
     container_name: mariadb
     restart: unless-stopped
-    env_file: .env
     environment:
-    - MARIADB_AUTO_UPGRADE=1
+      MARIADB_AUTO_UPGRADE: '1'
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-homeassistant}
+      MARIADB_USER: ${MARIADB_USER:-homeassistant}
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MARIADB_PASSWORD_FILE: /run/secrets/db_password
     volumes:
     - ./mariadb:/var/lib/mysql
     ports:
@@ -52,3 +55,11 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+    secrets:
+    - db_root_password
+    - db_password
+secrets:
+  db_root_password:
+    file: ./.secrets/db_root_password
+  db_password:
+    file: ./.secrets/db_password
