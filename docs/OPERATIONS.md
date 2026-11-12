@@ -2,6 +2,10 @@
 
 These files are deployment templates. CI validates Compose structure and hook behavior; it does not connect to hosts, prove firewall rules, or certify a successful restore.
 
+## Secret management
+
+Deployments now use the [Infisical workflow](INFISICAL.md). Its migration steps supersede instructions below that read credentials directly from `.env`. Use the deployment wrapper to synchronize secrets and supply Compose interpolation values. Infisical itself and emergency recovery stay independent of the manager.
+
 ## Roll out this change
 
 Keep an SSH/VPN session open and roll out one host at a time.

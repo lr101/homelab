@@ -1,0 +1,8 @@
+http:
+  middlewares:
+    infisical-vpn:
+      ipAllowList:
+        sourceRange:
+          - 10.217.236.0/24
+          - 127.0.0.1/32
+          - ::1/128

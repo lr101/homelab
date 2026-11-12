@@ -10,7 +10,10 @@ services:
     - ${UPLOAD_LOCATION:?Set UPLOAD_LOCATION in the service .env}:/usr/src/app/upload
     - /etc/localtime:/etc/localtime:ro
     env_file:
-    - .env
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     depends_on:
     - redis
     - database
@@ -48,7 +51,10 @@ services:
     volumes:
     - model-cache:/cache
     env_file:
-    - .env
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     restart: always
     labels:
     - com.centurylinklabs.watchtower.enable=true
@@ -92,10 +98,10 @@ services:
     annotations:
     - de.lr-projects.sso=false
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the service .env}
       POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in the service .env}
       POSTGRES_DB: ${DB_DATABASE_NAME:?Set DB_DATABASE_NAME in the service .env}
       POSTGRES_INITDB_ARGS: --data-checksums
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
     volumes:
     - ${DB_DATA_LOCATION:?Set DB_DATA_LOCATION in the service .env}:/var/lib/postgresql/data
     shm_size: 128mb
@@ -110,11 +116,15 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+    secrets:
+    - db_password
   immich-kiosk:
     image: ghcr.io/damongolding/immich-kiosk:latest
     container_name: immich-kiosk
     tty: true
-    env_file: kiosk.env
+    env_file:
+    - path: .secrets.kiosk.env
+      format: raw
     networks:
     - immich
     - frontend
@@ -141,3 +151,6 @@ networks:
   frontend:
     external: true
   immich: null
+secrets:
+  db_password:
+    file: ./.secrets/postgres_password

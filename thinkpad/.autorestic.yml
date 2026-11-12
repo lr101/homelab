@@ -57,7 +57,7 @@ locations:
     forget: prune
     hooks:
       before:
-      - python3 /hooks/mariadb-hook.py mariadb homeassistant --folder /data/ha
+      - python3 /hooks/mariadb-hook.py mariadb homeassistant --folder /data/ha --password-file /data/ha/.secrets/db_root_password
   
   monaserver:
     from:

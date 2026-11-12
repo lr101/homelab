@@ -74,3 +74,20 @@ class BackupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class PasswordFileTests(unittest.TestCase):
+    def test_mariadb_cli_reads_password_file_without_dotenv(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            password = root / 'root_password'
+            password.write_text('literal$secret\'"\\value\n')
+            docker = root / 'docker'
+            docker.write_text('#!/usr/bin/env python3\nimport os, sys\nfrom pathlib import Path\nif sys.argv[1] == "ps": print("database")\nelse:\n Path(os.environ["CAPTURE_FILE"]).write_text(os.environ["MYSQL_PWD"])\n print("dump")\n')
+            docker.chmod(0o700)
+            result = __import__('subprocess').run([sys.executable, str(HOOKS / 'mariadb-hook.py'),
+                'database', 'app', '--password-file', str(password), '--backup-dir', str(root / 'dumps')],
+                capture_output=True, text=True, env={**os.environ,
+                    'PATH': str(root) + os.pathsep + os.environ['PATH'], 'CAPTURE_FILE': str(root / 'captured')})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / 'captured').read_text(), 'literal$secret\'"\\value')
+            self.assertNotIn('literal$secret', result.stdout + result.stderr)

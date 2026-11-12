@@ -78,6 +78,9 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
+| **infisical** | Infisical | [secrets](https://secrets.dell.lr-projects.de) | - | configured | manual | - |
+|  | Db | - | - | configured | manual | - |
+|  | Redis | - | - | configured | manual | - |
 | **t3-code** | T3 Code | [code](https://code.dell.lr-projects.de) | - | configured | monitored | proxy |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.dell.lr-projects.de) | `443, 80` | configured | monitored | proxy |
 |  | Socket Proxy | - | - | configured | manual | - |
@@ -89,6 +92,10 @@ This repository contains setup templates and configuration files for various app
 The inventory describes configuration, not live verification. **Backup: configured** means a source folder and destination are declared; external mounts, exclusions, and successful restores still need checking. **Update: monitored** means Watchtower opt-in; the shared Watchtower runs in notification-only mode. **SSO: proxy** means an explicit OIDC middleware label; **app (declared)** is application SSO metadata, not a verified login test.
 
 See [operations and rollout](docs/OPERATIONS.md) for prerequisites, backup coverage, restore drills, and update procedures.
+
+## Secret management
+
+[Infisical on Dell](docs/INFISICAL.md) manages per-host deployment secrets. The guide covers initial setup, adding applications, migrating existing values, deployment commands, and offline recovery. Bootstrap credentials stay local; no live secrets are committed.
 
 ## Homelab setup
 

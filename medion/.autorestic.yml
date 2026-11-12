@@ -88,7 +88,7 @@ locations:
     hooks:
       before:
       - docker exec -u www-data nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --on
-      - python3 /hooks/mariadb-hook.py nextcloud-database-1 nextcloud --folder /data/nextcloud
+      - python3 /hooks/mariadb-hook.py nextcloud-database-1 nextcloud --folder /data/nextcloud --password-file /data/nextcloud/.secrets/db_root_password
       after:
       - docker exec -u www-data nextcloud-nextcloud-1 /var/www/html/occ maintenance:mode  --off
       failure:

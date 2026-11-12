@@ -5,7 +5,11 @@ services:
     ports:
     - 80:80
     - 443:443
-    env_file: .env
+    env_file:
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     labels:
     - traefik.enable=true
     - traefik.docker.network=frontend
@@ -45,6 +49,9 @@ services:
       SECRET_SALT: ${SECRET_SALT:?Set SECRET_SALT in the Traefik .env}
       CLIENT_ID: ${CLIENT_ID:?Set CLIENT_ID in the Traefik .env}
       CLIENT_SECRET: ${CLIENT_SECRET:?Set CLIENT_SECRET in the Traefik .env}
+      CF_DNS_API_TOKEN_FILE: /run/secrets/cf_dns_api_token
+    secrets:
+    - cf_dns_api_token
   socket-proxy:
     image: ghcr.io/tecnativa/docker-socket-proxy:v0.5.0
     restart: unless-stopped
@@ -67,3 +74,6 @@ networks:
     external: true
   docker-api:
     internal: true
+secrets:
+  cf_dns_api_token:
+    file: ./.secrets/cf_dns_api_token

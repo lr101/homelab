@@ -9,4 +9,4 @@ services:
       - fetchTime=60
     restart: unless-stopped
     volumes:
-      - ./secret.json:/app/secret.json
+      - ./.secrets/secret.json:/app/secret.json:ro

@@ -14,7 +14,8 @@ services:
     - backend-nextcloud
     labels:
     - traefik.enable=true
-    - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.medion.lr-projects.de`) || Host(`nextcloud.lr-projects.de`)"
+    - traefik.http.routers.nextcloud.rule=Host(`nextcloud.medion.lr-projects.de`)
+      || Host(`nextcloud.lr-projects.de`)
     - traefik.http.routers.nextcloud.entrypoints=websecure
     - traefik.http.routers.nextcloud.tls=true
     - traefik.http.routers.nextcloud.tls.certresolver=cloudflare
@@ -22,14 +23,18 @@ services:
     - traefik.http.services.nextcloud.loadbalancer.server.port=80
     - com.centurylinklabs.watchtower.enable=true
     - com.centurylinklabs.watchtower.depend-on=nextcloud
-    env_file: .env
+    env_file:
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     environment:
-    - MYSQL_HOST=database
-    - MYSQL_USER=nextcloud
-    - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD:?Set NEXTCLOUD_DB_PASSWORD in the service .env}
-    - MYSQL_DATABASE=nextcloud
-    - REDIS_HOST_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD in the service .env}
-    - REDIS_HOST=redis
+      MYSQL_HOST: database
+      MYSQL_USER: nextcloud
+      MYSQL_DATABASE: nextcloud
+      REDIS_HOST_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the service .env}
+      REDIS_HOST: redis
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
     depends_on:
     - database
     - redis
@@ -41,23 +46,24 @@ services:
         reservations:
           cpus: '2'
           memory: 2.5G
-
+    secrets:
+    - db_password
   elasticsearch:
     image: elasticsearch:9.5.3
     container_name: nextcloud_elasticsearch
     networks:
     - backend-nextcloud
     environment:
-      - discovery.type=single-node
-      - bootstrap.memory_lock=true
-      - xpack.security.enabled=false 
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    - discovery.type=single-node
+    - bootstrap.memory_lock=true
+    - xpack.security.enabled=false
+    - ES_JAVA_OPTS=-Xms1g -Xmx1g
     ulimits:
       memlock:
         soft: -1
         hard: -1
     volumes:
-      - ./elasticsearch_data:/usr/share/elasticsearch/data
+    - ./elasticsearch_data:/usr/share/elasticsearch/data
     restart: unless-stopped
     deploy:
       resources:
@@ -67,18 +73,16 @@ services:
         reservations:
           cpus: '1'
           memory: 1G
-
   database:
     image: mariadb:11.8
     restart: always
-    env_file: .env
     networks:
     - backend-nextcloud
     environment:
-    - MYSQL_ROOT_PASSWORD=${NEXTCLOUD_DB_ROOT_PASSWORD:?Set NEXTCLOUD_DB_ROOT_PASSWORD in the service .env}
-    - MYSQL_USER=nextcloud
-    - MYSQL_PASSWORD=${NEXTCLOUD_DB_PASSWORD:?Set NEXTCLOUD_DB_PASSWORD in the service .env}
-    - MYSQL_DATABASE=nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_DATABASE: nextcloud
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
     volumes:
     - database:/var/lib/mysql
     labels:
@@ -91,14 +95,21 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-
+    secrets:
+    - db_root_password
+    - db_password
   redis:
-    env_file: .env
+    env_file:
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     networks:
-      - backend-nextcloud
+    - backend-nextcloud
     image: redis
     restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the service .env}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in the
+      service .env}
     annotations:
     - de.lr-projects.description=Nextcloud Redis Cache
     - de.lr-projects.sso=false
@@ -109,12 +120,11 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
-
   euro-office:
     image: ghcr.io/euro-office/documentserver:latest
     restart: unless-stopped
     networks:
-      - frontend
+    - frontend
     labels:
     - traefik.enable=true
     - traefik.http.routers.office.rule=Host(`office.lr-projects.de`) || Host(`office.medion.lr-projects.de`)
@@ -129,17 +139,21 @@ services:
     - de.lr-projects.description=LibreOffice Online
     - de.lr-projects.sso=false
     environment:
-      - JWT_ENABLED=true
-      - JWT_SECRET=${JWT_SECRET_OFFICE:?Set JWT_SECRET_OFFICE in the service .env}
+    - JWT_ENABLED=true
+    - JWT_SECRET=${JWT_SECRET_OFFICE:?Set JWT_SECRET_OFFICE in the service .env}
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 2G
-        
 volumes:
-  database:
+  database: null
 networks:
   frontend:
     external: true
-  backend-nextcloud:
+  backend-nextcloud: null
+secrets:
+  db_password:
+    file: ./.secrets/db_password
+  db_root_password:
+    file: ./.secrets/db_root_password

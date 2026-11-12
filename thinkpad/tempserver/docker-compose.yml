@@ -3,7 +3,11 @@ services:
     command: java -jar -XX:+UseSerialGC -Xss512k -XX:MaxRAM=72m app.jar
     image: lrprojects/tempserver:1.0.0-SNAPSHOT
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     annotations:
     - de.lr-projects.description=Sensor Aggregation Server & UI
     ports:
