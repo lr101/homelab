@@ -3,18 +3,24 @@ services:
     build: .
     container_name: t3-code-server
     restart: unless-stopped
+    init: true
+    shm_size: "1gb"
+    security_opt:
+      - seccomp=./seccomp-browser.json
     environment:
       - T3CODE_HOST=0.0.0.0
       - T3CODE_PORT=8080
+      # Suppress opening the server UI on startup; agent browser tabs still work.
       - T3CODE_NO_BROWSER=true
+      - T3CODE_SERVER_BROWSER_SANDBOX=1
       - GH_TOKEN=${GITHUB_SECRET}
     volumes:
       - ./workspace:/workspace
-      - ./t3-data:/root/.t3
-      - ./codex-data:/root/.codex
-      - ./codex-data-eli:/root/.codex_p
+      - ./t3-data:/home/node/.t3
+      - ./codex-data:/home/node/.codex
+      - ./codex-data-eli:/home/node/.codex_p
       - ./mise-data:/opt/mise
-      - ./skills:/root/.agents/skills
+      - ./skills:/home/node/.agents/skills
     networks:
       - frontend
     env_file: .env

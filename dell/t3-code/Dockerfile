@@ -11,6 +11,26 @@ RUN apt-get update && \
         python3 \
         build-essential \
         bubblewrap \
+        sudo \
+        libnss3 \
+        libglib2.0-0t64 \
+        libatk1.0-0t64 \
+        libatk-bridge2.0-0t64 \
+        libatspi2.0-0t64 \
+        libdbus-1-3 \
+        libx11-6 \
+        libxcb1 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxext6 \
+        libxfixes3 \
+        libxrandr2 \
+        libxkbcommon0 \
+        libgbm1 \
+        libasound2t64 \
+        libexpat1 \
+        fontconfig \
+        fonts-liberation \
         openssh-client \
         pkg-config \
         unzip \
@@ -57,11 +77,25 @@ RUN curl -fsSL --retry 3 \
     install -m 0755 /tmp/rustfs/rustfs /usr/local/bin/rustfs && \
     rm -rf /tmp/rustfs /tmp/rustfs.zip
 
-RUN git config --global credential.helper \
+RUN git config --system credential.helper \
     '!f() { echo "username=${GITHUB_USER:-x-access-token}"; echo "password=${GH_TOKEN:-$GITHUB_TOKEN}"; }; f'
 
-RUN git config --global user.name "lr101-coding-bot" && \
-    git config --global user.email "info@lr-projects.de"
+RUN git config --system user.name "lr101-coding-bot" && \
+    git config --system user.email "info@lr-projects.de"
+
+# Only the local development database needs another OS identity. Agents cannot
+# use this rule to run commands as root.
+RUN printf '%s\n' 'node ALL=(postgres) NOPASSWD: /usr/bin/psql' \
+        > /etc/sudoers.d/t3-preview-postgres && \
+    chmod 0440 /etc/sudoers.d/t3-preview-postgres && \
+    visudo -cf /etc/sudoers.d/t3-preview-postgres && \
+    mkdir -p /home/node/.t3 /home/node/.codex /home/node/.codex_p /home/node/.agents/skills /workspace /opt/mise && \
+    chown -R node:node /home/node /workspace /opt/mise && \
+    chmod 0711 /root && \
+    ln -s /home/node/.t3 /root/.t3 && \
+    ln -s /home/node/.codex /root/.codex && \
+    ln -s /home/node/.codex_p /root/.codex_p && \
+    ln -s /home/node/.agents /root/.agents
 
 WORKDIR /workspace
 
