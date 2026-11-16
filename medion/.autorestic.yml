@@ -157,5 +157,5 @@ locations:
     hooks:
       before:
       - python3 /hooks/backup_dump.py /data/hiring_scraper/.backup/jobs.dump docker
-        exec -u postgres hiring-scraper-db-1 sh -c 'exec pg_dump -U "$POSTGRES_USER"
-        -Fc "$POSTGRES_DB"'
+        exec -u postgres hiring_scraper-db-1 sh -c 'exec pg_dump -U "${POSTGRES_USER:-postgres}"
+        -Fc "${POSTGRES_DB:-hiring}"'

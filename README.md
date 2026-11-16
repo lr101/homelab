@@ -8,7 +8,6 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | - | monitored | - |
 | **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | configured | monitored | - |
 | **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | configured | monitored | app (declared) |
 |  | Mariadb | - | `3306` | configured | monitored | - |
@@ -31,11 +30,8 @@ This repository contains setup templates and configuration files for various app
 | **actual-budget** | Actual Server | [budget](https://budget.medion.lr-projects.de) | - | configured | monitored | - |
 | **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | configured | monitored | proxy |
 |  | Adguard Exporter | - | - | configured | monitored | - |
-| **hiring_scraper** | Web | [jobs](https://jobs.medion.lr-projects.de) | - | configured | manual | - |
-|  | Worker | - | - | configured | manual | - |
-|  | Scheduler | - | - | configured | manual | - |
-|  | Db | - | - | configured | manual | - |
-|  | Redis | - | - | configured | manual | - |
+| **hiring_scraper** | Db | - | - | configured | manual | - |
+|  | App | [jobs](https://jobs.medion.lr-projects.de) | - | configured | manual | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | configured | monitored | app (declared) |
 |  | Immich Machine Learning | - | - | configured | monitored | - |
 |  | Redis | - | - | configured | monitored | - |

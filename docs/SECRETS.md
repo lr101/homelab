@@ -45,7 +45,7 @@ Synchronize, remove migrated passwords/tokens from the old local `.env` into a p
 | Stack | JSON keys / original content | Result |
 | --- | --- | --- |
 | All four Traefik stacks | `SECRET_SALT`, `CLIENT_ID`, `CLIENT_SECRET`; `CF_DNS_API_TOKEN` | OIDC environment plus a mounted Cloudflare token file. Use a separate zone-scoped DNS token for each host; replace legacy global API-key auth and revoke those keys after verification |
-| Medion / hiring-scraper | `POSTGRES_PASSWORD` | PostgreSQL password file; workers/web still receive the password for their existing database URL |
+| Medion / hiring-scraper | Existing `.env` values and `APP_BOOTSTRAP_ENV` containing its complete original text | Existing custom app/database images retain their environment; app receives its bootstrap dotenv file verbatim |
 | Medion / Immich | `DB_PASSWORD` | PostgreSQL password file; Immich still receives its existing app environment |
 | Medion / Immich kiosk | Original `kiosk.env` values in `secrets/medion/immich-kiosk.enc.json` | `.secrets.kiosk.env`; synchronized as a dependency of `immich-app` |
 | Medion / Nextcloud | `NEXTCLOUD_DB_ROOT_PASSWORD`, `NEXTCLOUD_DB_PASSWORD` | File delivery to MariaDB and Nextcloud; root password does not enter the generated application environment |
@@ -54,7 +54,6 @@ Synchronize, remove migrated passwords/tokens from the old local `.env` into a p
 | Medion / logging | `GF_SECURITY_ADMIN_PASSWORD`; `GRAFANA_INI` containing the existing `grafana-config/grafana.ini`; other existing logging environment values | Grafana admin password file and full existing INI, including any configured SSO credentials |
 | Thinkpad / MonaServer | `FIREBASE_TOKEN_JSON` containing the existing Firebase credential JSON; existing `.env` values | Private JSON mount plus existing app/RustFS environment |
 | Thinkpad / IWI bulletin board | `IWI_SECRET_JSON` containing the existing `secret.json` | Private read-only credential JSON mount |
-| Thinkpad / Garage | `GARAGE_CONFIG_TOML` containing existing `config/garage.toml` | Private complete Garage configuration |
 | Each host / backup-credentials | `AUTORESTIC_ENV` containing the **complete** existing host `.autorestic.env` | The existing host backend-password file, synchronized as a dependency of `shared-backup` |
 
 

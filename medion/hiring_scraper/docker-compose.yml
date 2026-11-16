@@ -1,30 +1,44 @@
-name: hiring-scraper
-
-x-app: &app
-  image: ghcr.io/lr101/hiring-scraper:latest
-  pull_policy: always
-  restart: unless-stopped
-  env_file:
-    - path: .env
-      required: false
-    - path: .secrets.env
-      format: raw
-  environment:
-    DATABASE_URL: postgresql://jobs:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the service .env}@db:5432/jobs
-    CELERY_BROKER_URL: redis://redis:6379/0
-    CELERY_RESULT_BACKEND: redis://redis:6379/0
-  depends_on:
-    db:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
-  networks:
-    - backend
-
 services:
-  web:
-    <<: *app
-    command: ["/app/docker/start-web.sh"]
+  db:
+    image: ghcr.io/lr101/hiring-scraper/hiring-scraper:db-latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
+    volumes:
+      - ./hiring_db:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d hiring"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+
+  app:
+    image: ghcr.io/lr101/hiring-scraper/hiring-scraper:latest
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
+    volumes:
+      - ./.secrets/app-bootstrap.env:/run/app-bootstrap.env:ro
+      - ./radius_codex:/var/lib/radius/codex
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     networks:
       - frontend
       - backend
@@ -37,63 +51,9 @@ services:
       - traefik.http.routers.hiring-scraper.tls.certresolver=cloudflare
       - traefik.http.routers.hiring-scraper.service=hiring-scraper-svc
       - traefik.http.services.hiring-scraper-svc.loadbalancer.server.port=8000
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/', timeout=2)"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-
-  worker:
-    <<: *app
-    command: ["celery", "-A", "config", "worker", "--loglevel=INFO"]
-
-  scheduler:
-    <<: *app
-    command: ["celery", "-A", "config", "beat", "--loglevel=INFO"]
-
-  db:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: jobs
-      POSTGRES_USER: jobs
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-    secrets:
-      - db_password
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - backend
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U jobs -d jobs"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  redis:
-    image: redis:8-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis-data:/data
-    networks:
-      - backend
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-volumes:
-  postgres-data:
-  redis-data:
 
 networks:
   backend:
   frontend:
     external: true
 
-
-secrets:
-  db_password:
-    file: ./.secrets/postgres_password
