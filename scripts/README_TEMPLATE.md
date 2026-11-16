@@ -14,6 +14,8 @@ See [operations and rollout](docs/OPERATIONS.md) for prerequisites, backup cover
 
 [SOPS and age](docs/SECRETS.md) encrypt per-host deployment secrets in Git. The guide covers key setup, migration, adding applications, deployment commands, and offline recovery. Private age keys and decrypted runtime files stay outside version control.
 
+See the [migration and agent handoff](docs/MIGRATION.md) before adopting an existing host or moving deployment files.
+
 ## Homelab setup
 
 The homelab uses a WireGuard VPN hosted on an Ionos VPS with a public IP to securely connect remote devices (thinkpad, medion, NAS, and mobile devices) in a private network. Services run on the thinkpad and medion laptops in my parents basement.

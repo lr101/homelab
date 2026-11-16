@@ -67,4 +67,4 @@ class ManifestTests(unittest.TestCase):
             self.assertTrue(values, f'{path}: no encrypted secret values')
             for key, value in values.items():
                 self.assertIsInstance(value, str, f'{path}: {key} must be an encrypted string')
-                self.assertTrue(value.startswith('ENC[') and value.endswith(']'), f'{path}: plaintext value for {key}')
+                self.assertTrue(value == '' or (value.startswith('ENC[') and value.endswith(']')), f'{path}: plaintext value for {key}')

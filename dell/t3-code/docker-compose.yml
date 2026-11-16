@@ -34,7 +34,7 @@ services:
       - traefik.http.routers.t3code.service=t3code-svc
       - traefik.http.services.t3code-svc.loadbalancer.server.port=8080
 
-      - traefik.http.routers.dev-worktrees.rule=HostRegexp(`^.+\\.dev\\.dell\\.lr-projects\\.de$`)
+      - traefik.http.routers.dev-worktrees.rule=HostRegexp(`^.+\.dev\.dell\.lr-projects\.de$`)
       - traefik.http.routers.dev-worktrees.middlewares=oidc-auth@file
       - "traefik.http.routers.dev-worktrees.entrypoints=websecure"
       - "traefik.http.routers.dev-worktrees.tls=true"

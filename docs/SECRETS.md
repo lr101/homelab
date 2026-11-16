@@ -20,9 +20,11 @@ export SOPS_AGE_KEY_FILE="$HOME/.config/homelab/dell.agekey"
 
 Create a separate recovery identity offline. Keep its private key in an independent encrypted recovery kit. Copy `.sops.yaml.example` to `.sops.yaml` and replace the placeholder recipients with each host's **public** age recipient and the recovery public recipient. Commit `.sops.yaml`; never commit the private keys. There is intentionally no working recipient configuration until real keys are provisioned.
 
-Each host's encrypted files must list only that host and the recovery recipient. This lets Dell decrypt Dell's secrets without granting access to Medion. SOPS creation rules apply when files are created; after changing recipients run `sops updatekeys FILE` for existing files and review the resulting encrypted diff. Removing a recipient cannot revoke previously decrypted copies or old Git history; rotate affected upstream credentials if a key is compromised.
+For the current local wrapper, authorize that host's public recipient and the recovery recipient. For the proposed push deployment, also authorize the controller's public recipient for the hosts it manages; the controller needs its private identity locally, while targets need no private key for ordinary pushes. Do not distribute a universal private identity to all servers. Host-specific identities keep Dell from decrypting Medion's secrets. SOPS creation rules apply when files are created; after changing recipients run `sops updatekeys FILE` for existing files and review the resulting encrypted diff. Removing a recipient cannot revoke previously decrypted copies or old Git history; rotate affected upstream credentials if a key is compromised.
 
 ## Migrate existing values
+
+Use the [operator and agent migration runbook](MIGRATION.md) for the read-only audit, encrypted host capture, and dry-run legacy importer. The controller-only Ansible layer is specified there as follow-up work; the current wrapper still operates on a local checkout.
 
 Migrate one stack at a time. Preserve a protected backup of the current configuration and record deployed image versions. **Keep the actual credentials unchanged during migration**, especially database passwords.
 
