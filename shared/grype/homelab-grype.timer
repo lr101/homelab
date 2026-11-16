@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily vulnerability scans
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=homelab-grype.service
+
+[Install]
+WantedBy=timers.target

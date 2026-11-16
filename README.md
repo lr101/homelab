@@ -130,3 +130,7 @@ The goal of this repository is to:
 ## Getting Started
 
 Each application folder contains the used setup (mostly docker-compose.yml) and the used configuration files with exempted secrets.
+
+For daily host and Docker image vulnerability scans on Fedora/Debian servers, see
+[the shared Grype setup](shared/grype/README.md). Results integrate with the existing
+Telegraf/InfluxDB stack and include an importable Grafana dashboard.

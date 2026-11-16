@@ -1,6 +1,6 @@
 services:
   telegraf:
-    image: telegraf:1.31-alpine
+    image: telegraf:1.40.1-alpine
     restart: unless-stopped
     env_file: .env
     user: "telegraf:${UID}"
@@ -16,6 +16,8 @@ services:
       - HOST_MOUNT_PREFIX=/hostfs
     volumes:
       - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      # Shared SELinux label applies only to the public Grype metrics directory.
+      - /var/lib/homelab-grype/metrics:/var/lib/homelab-grype/metrics:ro,z
       - /:/hostfs:ro
       - /etc:/hostfs/etc:ro
       - /proc:/hostfs/proc:ro

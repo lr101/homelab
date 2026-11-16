@@ -1,0 +1,15 @@
+[Unit]
+Description=Scan host and deployed Docker images with Grype
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/homelab-grype/scan.py
+User=root
+UMask=0022
+Nice=10
+IOSchedulingClass=idle
+# Each target has its own timeout; large hosts can take more than an hour.
+TimeoutStartSec=infinity
