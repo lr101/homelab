@@ -2,7 +2,11 @@ services:
   db:
     image: ghcr.io/lr101/hiring-scraper/hiring-scraper:db-latest
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     volumes:
       - ./hiring_db:/var/lib/postgresql/data
     networks:
@@ -17,9 +21,13 @@ services:
 
   app:
     image: ghcr.io/lr101/hiring-scraper/hiring-scraper:latest
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     volumes:
-      - .env:/run/app-bootstrap.env:ro
+      - ./.secrets/app-bootstrap.env:/run/app-bootstrap.env:ro
       - ./radius_codex:/var/lib/radius/codex
     depends_on:
       db:

@@ -2,5 +2,15 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "pinDigests": true,
+  "packageRules": [
+    {
+      "matchManagers": [
+        "docker-compose",
+        "dockerfile"
+      ],
+      "automerge": false
+    }
   ]
 }

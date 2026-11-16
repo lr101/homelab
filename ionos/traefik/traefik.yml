@@ -19,6 +19,7 @@ providers:
     directory: /etc/traefik/dynamic
     watch: true
   docker:
+    endpoint: "tcp://socket-proxy:2375"
     exposedByDefault: false
     network: frontend
 
@@ -30,7 +31,7 @@ accesslog:
   
 api:
   dashboard: true
-  insecure: true
+  insecure: false
 
 certificatesResolvers:
   cloudflare:

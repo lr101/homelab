@@ -3,17 +3,22 @@ services:
     image: traefik:v3
     container_name: traefik
     restart: always
-    env_file: .env
+    env_file:
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     ports:
     - 443:443
     - 80:80
-    extra_hosts: 
-    - "host.docker.internal:host-gateway"
+    extra_hosts:
+    - host.docker.internal:host-gateway
     annotations:
     - de.lr-projects.description=Reverse Proxy (with https)
     - de.lr-projects.sso=true
     networks:
     - frontend
+    - docker-api
     labels:
     - com.centurylinklabs.watchtower.enable=true
     volumes:
@@ -21,7 +26,6 @@ services:
     - ./dynamic:/etc/traefik/dynamic
     - ./certificates:/etc/traefik/certificates
     - ./traefik-logs:/logs
-    - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
       resources:
         limits:
@@ -30,11 +34,25 @@ services:
         reservations:
           cpus: '0.2'
           memory: 128M
+    depends_on:
+      socket-proxy:
+        condition: service_started
+    environment:
+      SECRET_SALT: ${SECRET_SALT:?Set SECRET_SALT in the Traefik .env}
+      CLIENT_ID: ${CLIENT_ID:?Set CLIENT_ID in the Traefik .env}
+      CLIENT_SECRET: ${CLIENT_SECRET:?Set CLIENT_SECRET in the Traefik .env}
+      CF_DNS_API_TOKEN_FILE: /run/secrets/cf_dns_api_token
+    secrets:
+    - cf_dns_api_token
   crowdsec:
     image: crowdsecurity/crowdsec:latest
     container_name: crowdsec
     restart: unless-stopped
-    env_file: .env
+    env_file:
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     annotations:
     - de.lr-projects.description=Security monitoring
     - de.lr-projects.sso=false
@@ -56,6 +74,26 @@ services:
         limits:
           cpus: '0.1'
           memory: 128M
+  socket-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    environment:
+      CONTAINERS: '1'
+      EVENTS: '1'
+      PING: '1'
+      VERSION: '1'
+      POST: '0'
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+    - docker-api
+    security_opt:
+    - no-new-privileges:true
 networks:
   frontend:
     external: true
+  docker-api:
+    internal: true
+secrets:
+  cf_dns_api_token:
+    file: ./.secrets/cf_dns_api_token

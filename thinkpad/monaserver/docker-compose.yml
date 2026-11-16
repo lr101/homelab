@@ -9,9 +9,12 @@ services:
     cap_drop:
       - ALL
     volumes:
-      - ./firebase-token.json:/app/firebase-token.json:ro
+      - ./.secrets/firebase-token.json:/app/firebase-token.json:ro
     env_file:
-      - ./.env
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     networks:
       - frontend
       - postgis
@@ -58,7 +61,10 @@ services:
     networks:
       - frontend
     env_file:
-      - ./.env
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     labels:
       - traefik.enable=true
       - "traefik.http.routers.rustfs.rule=Host(`minio.lr-projects.de`) || Host(`s3.thinkpad.lr-projects.de`)"

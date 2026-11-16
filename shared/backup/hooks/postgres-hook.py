@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """postgres-hook.py
 
-Usage: postgres-hook.py CONTAINER PG_USER PG_PASSWORD NUM_DBS DB1 [DB2 ...]
+Usage: postgres-hook.py CONTAINER PG_USER DB1 [DB2 ...]
 
 Creates compressed pg_dump backups by exec'ing into a running postgres docker container.
 """
@@ -9,11 +9,14 @@ Creates compressed pg_dump backups by exec'ing into a running postgres docker co
 from __future__ import annotations
 
 import argparse
+
 import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from backup_dump import atomic_dump
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,17 +52,8 @@ def container_running(container: str) -> bool:
 def dump_db(container: str, pg_user: str, db: str, out_path: Path) -> int:
     cmd = ["docker", "exec", "-u", pg_user, container, "pg_dump", "-U", pg_user, "-Fc", db]
     print(f"Running: {' '.join(shlex.quote(c) for c in cmd)}")
-    with open(out_path, "wb") as f:
-        popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    return atomic_dump(cmd, out_path)
 
-        for chunk in iter(lambda: popen.stdout.read(8192), b""):
-            f.write(chunk)
-
-        popen.stdout.close()
-        return popen.wait()
-
-
-    return 0
 
 def main() -> int:
     args = parse_args()

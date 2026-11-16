@@ -11,10 +11,9 @@ services:
     volumes:
     - ./postgres-data:/var/lib/postgresql/data
     - ./backup:/backup
-    env_file: ./.env
     environment:
-    - POSTGRES_PASSWORD=${PG_PASSWORD}
-    - POSTGRES_USER=${PG_USER}
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
     networks:
     - postgis
     deploy:
@@ -25,6 +24,11 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+    secrets:
+    - db_password
 networks:
   postgis:
     external: true
+secrets:
+  db_password:
+    file: ./.secrets/postgres_password

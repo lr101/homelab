@@ -5,3 +5,12 @@ swarm/**
 **/.autorestic.env
 **/.autorestic.yml.old
 **/.restore
+**/__pycache__/
+*.py[cod]
+
+# Decrypted runtime files and private encryption keys
+**/.secrets.env
+**/.secrets.*.env
+**/.secrets/
+**/secrets.yaml
+**/*.agekey
