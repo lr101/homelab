@@ -78,9 +78,6 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **infisical** | Infisical | [secrets](https://secrets.dell.lr-projects.de) | - | configured | manual | - |
-|  | Db | - | - | configured | manual | - |
-|  | Redis | - | - | configured | manual | - |
 | **t3-code** | T3 Code | [code](https://code.dell.lr-projects.de) | - | configured | monitored | proxy |
 | **traefik** | Reverse Proxy | [traefik](https://traefik.dell.lr-projects.de) | `443, 80` | configured | monitored | proxy |
 |  | Socket Proxy | - | - | configured | manual | - |
@@ -95,7 +92,7 @@ See [operations and rollout](docs/OPERATIONS.md) for prerequisites, backup cover
 
 ## Secret management
 
-[Infisical on Dell](docs/INFISICAL.md) manages per-host deployment secrets. The guide covers initial setup, adding applications, migrating existing values, deployment commands, and offline recovery. Bootstrap credentials stay local; no live secrets are committed.
+[SOPS and age](docs/SECRETS.md) encrypt per-host deployment secrets in Git. The guide covers key setup, migration, adding applications, deployment commands, and offline recovery. Private age keys and decrypted runtime files stay outside version control.
 
 ## Homelab setup
 

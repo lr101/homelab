@@ -4,7 +4,7 @@ These files are deployment templates. CI validates Compose structure and hook be
 
 ## Secret management
 
-Deployments now use the [Infisical workflow](INFISICAL.md). Its migration steps supersede instructions below that read credentials directly from `.env`. Use the deployment wrapper to synchronize secrets and supply Compose interpolation values. Infisical itself and emergency recovery stay independent of the manager.
+Deployments now use the [SOPS workflow](SECRETS.md). Its migration steps supersede instructions below that read credentials directly from `.env`. Use the deployment wrapper to synchronize secrets and supply Compose interpolation values. Private age keys must remain available independently of the repository backups.
 
 ## Roll out this change
 

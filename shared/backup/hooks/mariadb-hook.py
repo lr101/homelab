@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("container", help="Docker container name or id running MariaDB/MySQL")
     p.add_argument("dbs", nargs="+", help="Database names to dump")
     p.add_argument("--folder", help="Folder containing .env and .backup subdirectory (constructs --env-file and --backup-dir)")
-    p.add_argument("--password-file", type=Path, help="Read the database password from an Infisical-materialized file")
+    p.add_argument("--password-file", type=Path, help="Read the database password from an SOPS-materialized file")
     p.add_argument("--env-file", help="Path to .env file (default: <folder>/.env or .env in current directory)")
     p.add_argument("--backup-dir", help="Directory to write dumps to (default: <folder>/.backup or ./mariadb-backups)")
     p.add_argument("--mysql-user", default="root", help="MySQL user (default: root)")
@@ -96,7 +96,7 @@ def main() -> int:
         env_file = args.env_file or str(Path.cwd() / ".env")
         backup_dir_str = args.backup_dir or str(Path.cwd() / "mariadb-backups")
 
-    # Infisical file delivery avoids reparsing credentials as dotenv syntax.
+    # SOPS file delivery avoids reparsing credentials as dotenv syntax.
     if args.password_file:
         mysql_password = args.password_file.read_text().rstrip("\r\n")
     else:

@@ -12,7 +12,7 @@ See [operations and rollout](docs/OPERATIONS.md) for prerequisites, backup cover
 
 ## Secret management
 
-[Infisical on Dell](docs/INFISICAL.md) manages per-host deployment secrets. The guide covers initial setup, adding applications, migrating existing values, deployment commands, and offline recovery. Bootstrap credentials stay local; no live secrets are committed.
+[SOPS and age](docs/SECRETS.md) encrypt per-host deployment secrets in Git. The guide covers key setup, migration, adding applications, deployment commands, and offline recovery. Private age keys and decrypted runtime files stay outside version control.
 
 ## Homelab setup
 
