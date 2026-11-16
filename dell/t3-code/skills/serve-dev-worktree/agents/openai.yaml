@@ -1,0 +1,4 @@
+interface:
+  display_name: "Preview"
+  short_description: "Start and show an explicitly requested preview"
+  default_prompt: "Use $serve-dev-worktree to Preview the current worktree and show its links."

@@ -9,6 +9,13 @@ http:
       tls:
         certResolver: cloudflare
       service: home-service
+    jobs:
+      entryPoints:
+        - websecure
+      rule: "Host(`jobs.lr-projects.de`)"
+      tls:
+        certResolver: cloudflare
+      service: jobs-service
 
     stick-it-web:
       entryPoints: 
@@ -70,7 +77,7 @@ http:
         certResolver: cloudflare
       service: stickit-service
       middlewares:
-        - secHeaders
+        - stick-it-web-headers
 
 
     # stick-it-map
@@ -90,6 +97,14 @@ http:
         servers:
           - url: "https://home.thinkpad.lr-projects.de"
         passHostHeader: false
+
+    jobs-service:
+      loadBalancer:
+        servers:
+          - url: "https://jobs.medion.lr-projects.de"
+        passHostHeader: false
+      middlewares:
+        - oidc-auth
 
     stick-it-web-service:
       loadBalancer:
