@@ -8,7 +8,6 @@ This repository contains setup templates and configuration files for various app
 
 | Group | Name  | Domain | Ports | Backup | Update | SSO |
 | :--- | :---  | :----- | :--- | :----: | :----: | :--: |
-| **garage** | Garage | [minio](https://minio.lr-projects.de) | - | - | ✅ | - |
 | **glance** | Glance | [home](https://home.thinkpad.lr-projects.de) | - | ✅ | ✅ | - |
 | **ha** | Homeassistant | [ha](https://ha.thinkpad.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Mariadb | - | `3306` | ✅ | ✅ | - |
