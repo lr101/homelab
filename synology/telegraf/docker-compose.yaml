@@ -1,0 +1,29 @@
+services:
+  telegraf:
+    image: telegraf:1.31-alpine
+    restart: unless-stopped
+    env_file: .env
+    user: "telegraf:${DOCKER_GID}"
+    network_mode: host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    environment:
+      - HOST_ETC=/hostfs/etc
+      - HOST_PROC=/hostfs/proc
+      - HOST_SYS=/hostfs/sys
+      - HOST_MOUNT_PREFIX=/hostfs
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - /:/hostfs:ro
+      - /etc:/hostfs/etc:ro
+      - /proc:/hostfs/proc:ro
+      - /sys:/hostfs/sys:ro
+      - /var/run/utmp:/var/run/utmp:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /dev:/dev:ro
+    annotations:
+      - de.lr-projects.description=Telegraf monitoring agent
+      - de.lr-projects.deployed_on=medion,thinkpad,ionos
+

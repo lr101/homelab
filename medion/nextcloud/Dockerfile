@@ -1,4 +1,4 @@
-FROM nextcloud:34
+FROM nextcloud:35
 
 # Switch to root to install system packages
 USER root
