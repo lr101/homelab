@@ -106,8 +106,8 @@ above. If a pull or provenance check fails, keep the current deployment running.
 If startup or verification fails, stop the new app and workers before
 investigating; a stopped API alone leaves workers able to write. For a
 rollback to the old bundled app, use the new Compose configuration to stop
-the whole project and remove its stopped service containers with
-`docker compose rm -f`. Keep the verified image settings available until
+the whole project with `docker compose stop`, then remove its stopped
+service containers with `docker compose rm -f`. Keep the verified image settings available until
 those commands finish.
 
 Restore both pre-rollout directory backups while PostgreSQL and all app
