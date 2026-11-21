@@ -1,6 +1,32 @@
+x-bootstrap: &bootstrap
+  image: ${HIRING_APP_IMAGE:?Set HIRING_APP_IMAGE to the verified Radius app image}
+  env_file: .env
+  environment:
+    RADIUS_CODEX_STATE_DIR: /var/lib/radius/codex
+  volumes:
+    - .env:/run/app-bootstrap.env:ro
+    - ./radius_codex:/var/lib/radius/codex
+  networks:
+    - backend
+
+x-runtime: &runtime
+  <<: *bootstrap
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  init: true
+  restart: unless-stopped
+  security_opt:
+    - apparmor=${HIRING_APPARMOR_PROFILE:-unconfined}
+    - seccomp=./docker/chromium-seccomp.json
+
+x-worker: &worker
+  <<: *runtime
+  restart: on-failure
+
 services:
   db:
-    image: ghcr.io/lr101/hiring-scraper/hiring-scraper:db-latest
+    image: ${HIRING_DB_IMAGE:?Set HIRING_DB_IMAGE to the verified Radius database image}
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -14,17 +40,17 @@ services:
       retries: 20
       start_period: 10s
 
-
-  app:
-    image: ghcr.io/lr101/hiring-scraper/hiring-scraper:latest
-    env_file: .env
-    volumes:
-      - .env:/run/app-bootstrap.env:ro
-      - ./radius_codex:/var/lib/radius/codex
+  migrate:
+    <<: *bootstrap
+    command: ["--migrate"]
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
+
+  app:
+    <<: *runtime
+    command: ["--api"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).read()"]
       interval: 10s
@@ -43,6 +69,30 @@ services:
       - traefik.http.routers.hiring-scraper.tls.certresolver=cloudflare
       - traefik.http.routers.hiring-scraper.service=hiring-scraper-svc
       - traefik.http.services.hiring-scraper-svc.loadbalancer.server.port=8000
+
+  worker:
+    <<: *worker
+    command: ["--worker", "worker"]
+
+  discovery-worker:
+    <<: *worker
+    command: ["--worker", "discovery_worker"]
+
+  search-snapshot-worker:
+    <<: *worker
+    command: ["--worker", "search_snapshot_worker"]
+
+  profile-match-worker:
+    <<: *worker
+    command: ["--worker", "profile_match_worker"]
+
+  semantic-search-worker:
+    <<: *worker
+    command: ["--worker", "semantic_search_worker"]
+
+  application-preparation-worker:
+    <<: *worker
+    command: ["--worker", "application_preparation_worker"]
 
 networks:
   backend:
