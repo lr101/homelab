@@ -96,8 +96,10 @@ services:
 
   job-analysis-worker:
     <<: *worker
+    # No ChatGPT login state: this worker only talks to the database and local models.
+    volumes:
+      - .env:/run/app-bootstrap.env:ro
     environment:
-      RADIUS_CODEX_STATE_DIR: /var/lib/radius/codex
       SEMANTIC_EMBEDDING_URL: http://semantic-search-worker:8001/embed
       JOB_ANALYSIS_LLM_URL: http://llm:8080
       JOB_ANALYSIS_RERANK_URL: http://llm-reranker:8080
@@ -125,6 +127,10 @@ services:
       - llm_models:/models
     networks:
       - backend
+    # The server parses untrusted posting text: no extra kernel capabilities.
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
     cpus: 4
     cpu_shares: 256
@@ -154,6 +160,10 @@ services:
       - llm_models:/models
     networks:
       - backend
+    # The server parses untrusted posting text: no extra kernel capabilities.
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
     cpus: 4
     cpu_shares: 256
