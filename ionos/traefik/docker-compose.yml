@@ -23,7 +23,7 @@ services:
     - com.centurylinklabs.watchtower.enable=true
     volumes:
     - ./traefik.yml:/etc/traefik/traefik.yaml:ro
-    - ./dynamic:/etc/traefik/dynamic
+    - ./dynamic:/etc/traefik/dynamic:ro
     - ./certificates:/etc/traefik/certificates
     - ./traefik-logs:/logs
     deploy:

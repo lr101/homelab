@@ -8,7 +8,7 @@ The deployment wrapper decrypts selected files in memory, validates every select
 
 Requirements:
 
-- **Controller-driven SSH migration (`scripts/ssh-migrate.py`):** Install SOPS, age, Python 3.10+, and `scripts/requirements.txt` (`PyYAML`, `python-dotenv`) on your controller workstation along with SSH access (`known_hosts` populated). Remote hosts only need ordinary Python 3 (stdlib) and Docker Engine + Compose **2.30+** (for `format: raw` env files)—no remote Git tooling checkout, SOPS binary, private age keys, or Python packages are required.
+- **Controller-driven SSH migration (`scripts/ssh-migrate.py`):** Install SOPS, age, Python 3.10+, and `scripts/requirements.txt` (`PyYAML`, `python-dotenv`) on your controller workstation along with SSH access (`known_hosts` populated). Remote hosts only need ordinary Python **3.8+** (stdlib only; compatible with Synology DSM 7.x) and Docker Engine + Compose **2.30+** (enforced by `plan`/`apply` for `format: raw` env files)—no remote Git tooling checkout, SOPS binary, private age keys, or Python packages are required.
 - **Local host wrapper (`scripts/sops-secrets.py`):** If operating directly on a server checkout, install SOPS, age, Python 3.9+, and Docker Compose **2.30+** on that host. CI needs no production keys.
 
 Generate one age identity per host, **outside the repository**, using a protected directory owned by the deployment account:

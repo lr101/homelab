@@ -2,7 +2,7 @@
 """Controller-side SSH migration tool for inspecting, encrypting, adopting, and rolling back stacks.
 
 Runs on an operator workstation/controller with Git checkout, Python, SOPS/age, and SSH access.
-Remote hosts need only Python 3 + Docker/Compose (plus optional passwordless sudo for host capture).
+Remote hosts need only Python 3.8+ (stdlib) + Docker/Compose 2.30+ (plus optional passwordless sudo).
 No Git checkout, SOPS binary, private age keys, or Python packages are installed on remote hosts.
 See docs/MIGRATION.md.
 """
@@ -29,7 +29,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = Path(__file__).resolve().parent
 REMOTE_AGENT_PATH = SCRIPTS_DIR / 'ssh_remote_agent.py'
 OVERRIDE_FILENAME = '.homelab-adopt.override.yml'
+MIN_COMPOSE_VERSION = (2, 30, 0)
+COMPOSE_VER_RE = re.compile(r'v?(\d+)\.(\d+)(?:\.(\d+))?')
 SSH_TARGET_RE = re.compile(r'[A-Za-z0-9._@:\[\]-]+\Z')
+PROJECT_NAME_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*\Z')
+ANON_VOL_HEX_RE = re.compile(r'[0-9a-f]{64}\Z')
 VAR_EXPR_RE = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:-|-)([^}]*))?(?::\?[^}]*|\?[^}]*)?\}|\$([A-Za-z_][A-Za-z0-9_]*)')
 
 
@@ -82,6 +86,45 @@ def validate_remote_path(path_str: str, label: str = 'Remote path') -> str:
     if not path_str or any(ord(ch) < 32 or ord(ch) == 127 for ch in path_str):
         raise SshMigrationError(f'{label} contains invalid control characters')
     return path_str
+
+
+def ensure_remote_rollback_disjoint(rollback_dir: str, remote_root: str) -> str:
+    rb = posixpath.normpath(validate_remote_path(rollback_dir, 'Rollback directory'))
+    rr = posixpath.normpath(validate_remote_path(remote_root, 'Remote root'))
+    if rb == rr or rb.startswith(rr.rstrip('/') + '/') or rr.startswith(rb.rstrip('/') + '/'):
+        raise SshMigrationError(
+            f'Remote rollback directory ({rb}) must be placed outside remote_root ({rr})'
+        )
+    return rb
+
+
+def parse_compose_version(version_str: str | None) -> tuple[int, int, int] | None:
+    if not version_str:
+        return None
+    m = COMPOSE_VER_RE.search(str(version_str))
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+
+
+def require_compose_version(version_str: str | None) -> tuple[int, int, int]:
+    parsed = parse_compose_version(version_str)
+    if parsed is None:
+        raise SshMigrationError(
+            f'Docker Compose v2 (>= {MIN_COMPOSE_VERSION[0]}.{MIN_COMPOSE_VERSION[1]}) is not available on the remote host'
+        )
+    if parsed < MIN_COMPOSE_VERSION:
+        raise SshMigrationError(
+            f'Remote Docker Compose version {parsed[0]}.{parsed[1]}.{parsed[2]} is unsupported; '
+            f'Compose >= {MIN_COMPOSE_VERSION[0]}.{MIN_COMPOSE_VERSION[1]} is required for format: raw env files'
+        )
+    return parsed
+
+
+def check_docker_errors(resp: dict, context: str) -> None:
+    errs = resp.get('docker_errors')
+    if errs:
+        raise SshMigrationError(f'Remote Docker inspection failed during {context}: {"; ".join(errs)}')
 
 
 def inside(root: Path, relative: str) -> Path:
@@ -354,11 +397,56 @@ def interpolate_value(expr: str, env_map: dict[str, str]) -> str:
 
 def normalize_image_ref(ref: str) -> str:
     s = ref.strip()
-    if s.startswith('docker.io/'):
-        s = s[len('docker.io/'):]
-    if s.startswith('library/'):
-        s = s[len('library/'):]
-    return s
+    if not s or s.startswith('sha256:'):
+        return s
+    # Split off digest if present
+    digest = ''
+    if '@' in s:
+        s, digest = s.split('@', 1)
+        digest = '@' + digest
+    # Normalize Docker Hub default registry/library prefixes
+    parts = s.split('/')
+    registry = ''
+    if len(parts) > 1 and ('.' in parts[0] or ':' in parts[0] or parts[0] == 'localhost'):
+        reg = parts[0]
+        rest = parts[1:]
+        if reg in ('docker.io', 'index.docker.io', 'registry-1.docker.io'):
+            registry = ''
+        else:
+            registry = reg
+    else:
+        rest = parts
+    if not registry and len(rest) == 2 and rest[0] == 'library':
+        rest = [rest[1]]
+    repo_part = '/'.join(rest)
+    if not digest and ':' not in repo_part:
+        repo_part = f'{repo_part}:latest'
+    prefix = f'{registry}/' if registry else ''
+    return f'{prefix}{repo_part}{digest}'
+
+
+def is_anonymous_volume(vname: str | None, vol_info: dict | None) -> bool:
+    if not vname:
+        return False
+    labels = (vol_info or {}).get('labels') or {}
+    if 'com.docker.volume.anonymous' in labels:
+        return True
+    if 'com.docker.compose.volume' not in labels and ANON_VOL_HEX_RE.fullmatch(vname):
+        return True
+    return False
+
+
+def git_tracked_files(root: Path) -> set[str] | None:
+    if not (root / '.git').exists():
+        return None
+    proc = subprocess.run(
+        ['git', '-C', str(root), 'ls-files', '-z'],
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    return {item.decode('utf-8', errors='surrogateescape') for item in proc.stdout.split(b'\0') if item}
 
 
 def load_merged_compose(root: Path, entry: dict) -> tuple[dict, dict, list[str]]:
@@ -403,15 +491,18 @@ def load_merged_compose(root: Path, entry: dict) -> tuple[dict, dict, list[str]]
 
 
 def collect_staged_repo_files(root: Path, stack_entry: dict, dep_entries: list[dict], secret_output_rels: set[str]) -> list[str]:
-    """Return explicitly allowlisted repo-relative files to stage for a stack (never data dirs!)."""
+    """Return strictly allowlisted Git-tracked repo files to stage (never RW mutable app configs or data dirs!)."""
     stack_dir = inside(root, stack_entry['directory'])
     services, _, extra_compose_files = load_merged_compose(root, stack_entry)
+    tracked = git_tracked_files(root)
     rel_files: set[str] = set()
 
     def add_rel(path_in_repo: Path) -> None:
-        if not path_in_repo.is_file():
+        if path_in_repo.is_symlink() or not path_in_repo.is_file():
             return
-        rel = str(path_in_repo.relative_to(root.resolve()))
+        rel = path_in_repo.relative_to(root.resolve()).as_posix()
+        if tracked is not None and rel not in tracked:
+            return
         if rel in secret_output_rels:
             return
         if Path(rel).name in ('.env', '.secrets.env') or '.secrets' in Path(rel).parts:
@@ -421,12 +512,23 @@ def collect_staged_repo_files(root: Path, stack_entry: dict, dep_entries: list[d
     for cf in list(stack_entry.get('compose', [])) + extra_compose_files:
         add_rel(inside(stack_dir, cf))
 
-    # Inspect relative bind mounts and seccomp files referenced by Compose
+    # Inspect ONLY explicit read-only (:ro) relative bind mounts and seccomp files referenced by Compose
     candidate_rel_refs: list[str] = []
     for scfg in services.values():
         for vol in scfg.get('volumes') or []:
-            src = vol.split(':', 1)[0] if isinstance(vol, str) else (vol.get('source') or '')
-            if src.startswith('./'):
+            src = ''
+            is_ro = False
+            if isinstance(vol, str):
+                parts = vol.split(':')
+                src = parts[0]
+                if len(parts) >= 3:
+                    opts = {opt.strip() for opt in parts[2].split(',')}
+                    is_ro = 'ro' in opts
+            elif isinstance(vol, dict):
+                if vol.get('type', 'bind') == 'bind':
+                    src = str(vol.get('source') or '')
+                    is_ro = bool(vol.get('read_only'))
+            if is_ro and src.startswith('./'):
                 candidate_rel_refs.append(src[2:])
         for opt in scfg.get('security_opt') or []:
             if isinstance(opt, str) and opt.startswith('seccomp=./'):
@@ -512,6 +614,67 @@ def detect_oneshot_services(services: dict[str, dict]) -> list[str]:
     return sorted(flagged)
 
 
+def _service_direct_deps(scfg: dict) -> list[tuple[str, str]]:
+    deps = scfg.get('depends_on')
+    out: list[tuple[str, str]] = []
+    if isinstance(deps, list):
+        for name in deps:
+            if isinstance(name, str):
+                out.append((name, 'service_started'))
+    elif isinstance(deps, dict):
+        for name, cfg in deps.items():
+            cond = cfg.get('condition', 'service_started') if isinstance(cfg, dict) else 'service_started'
+            out.append((str(name), str(cond)))
+    return out
+
+
+def build_start_waves(services: dict[str, dict], target_services: list[str], oneshot_services: set[str]) -> list[dict]:
+    """Build deterministic topological start waves over target_services, propagating deps through skipped one-shots."""
+    target_set = set(target_services)
+    if not target_set:
+        return []
+
+    # Compute effective dependency edges: dep_map[u] = {v: needs_healthy_bool}
+    dep_map: dict[str, dict[str, bool]] = {s: {} for s in target_set}
+
+    def collect_effective(src_svc: str, cur: str, visiting: set[str]) -> None:
+        if cur in visiting:
+            raise SshMigrationError(f'Cyclic depends_on involving service "{cur}"')
+        visiting.add(cur)
+        for dep_name, cond in _service_direct_deps(services.get(cur) or {}):
+            if dep_name in target_set and dep_name != src_svc:
+                need_healthy = (cond == 'service_healthy') or dep_map[src_svc].get(dep_name, False)
+                dep_map[src_svc][dep_name] = need_healthy
+            elif dep_name in oneshot_services:
+                # Inherit dependencies of skipped one-shot (e.g. app -> migrate -> db:service_healthy)
+                collect_effective(src_svc, dep_name, visiting)
+        visiting.remove(cur)
+
+    for svc in sorted(target_set):
+        collect_effective(svc, svc, set())
+
+    # Partition into topological waves (Kahn's algorithm)
+    remaining = set(target_set)
+    placed: set[str] = set()
+    waves: list[dict] = []
+
+    while remaining:
+        ready = sorted(s for s in remaining if all(d in placed for d in dep_map[s]))
+        if not ready:
+            raise SshMigrationError(f'Cyclic depends_on among services: {", ".join(sorted(remaining))}')
+        # Any service in this wave that a later wave requires to be healthy must be waited on
+        later = remaining - set(ready)
+        wait_healthy = sorted(
+            s for s in ready
+            if any(dep_map[other].get(s, False) for other in later)
+        )
+        waves.append({'services': ready, 'wait_healthy': wait_healthy})
+        placed.update(ready)
+        remaining -= set(ready)
+
+    return waves
+
+
 def compute_remote_fingerprint(containers: list[dict], pinned_volumes: dict[str, str], remote_file_hashes: dict[str, str | None]) -> str:
     norm_containers = sorted(
         [
@@ -522,6 +685,7 @@ def compute_remote_fingerprint(containers: list[dict], pinned_volumes: dict[str,
                 'image': c.get('image'),
                 'configured_image': c.get('configured_image'),
                 'working_dir': c.get('working_dir'),
+                'config_files': c.get('config_files'),
                 'mounts': sorted(
                     [
                         {
@@ -535,6 +699,7 @@ def compute_remote_fingerprint(containers: list[dict], pinned_volumes: dict[str,
                     key=lambda x: (str(x.get('Destination')), str(x.get('Source'))),
                 ),
                 'running': c.get('running'),
+                'exit_code': c.get('exit_code'),
             }
             for c in containers
         ],
@@ -670,6 +835,7 @@ def cmd_import_secrets(root: Path, manifest: dict, args: argparse.Namespace) -> 
     ssh = SshClient(args.ssh_target, args.ssh_bin, args.ssh_config, args.ssh_identity, args.ssh_port, args.connect_timeout)
 
     deployed_dirs: set[str] = set()
+    required_dependencies: set[str] = set()
     source_root_real = args.source_root
     if args.all_stacks and args.skip_not_deployed:
         audit_resp = ssh.call({
@@ -678,11 +844,19 @@ def cmd_import_secrets(root: Path, manifest: dict, args: argparse.Namespace) -> 
             'probe_paths': [],
             'docker_sudo': args.docker_sudo,
         })
+        check_docker_errors(audit_resp, 'import-secrets audit')
         source_root_real = audit_resp.get('source_root_realpath', args.source_root)
         for c in audit_resp.get('containers', []):
             wdir = c.get('working_dir')
             if wdir:
                 deployed_dirs.add(posixpath.normpath(wdir))
+        # Mark dependencies of any deployed stack as deployed/required (e.g. backup-credentials for shared-backup)
+        for sname, sentry in entries.items():
+            sdir = posixpath.normpath(posixpath.join(source_root_real, sentry['directory']))
+            if sentry.get('compose') and sdir in deployed_dirs:
+                for dep in expand_manifest_selection(entries, [sname], False):
+                    if dep != sname:
+                        required_dependencies.add(dep)
 
     needed_paths: set[str] = set()
     for name in selected:
@@ -705,12 +879,14 @@ def cmd_import_secrets(root: Path, manifest: dict, args: argparse.Namespace) -> 
         mig = entry.get('migration', {})
         env_files = mig.get('env_files', [])
         file_values = mig.get('file_values', {})
-        all_sources = list(env_files) + list(file_values.values())
+        all_sources = sorted(set(env_files) | set(file_values.values()))
 
         statuses = {p: remote_files.get(p, {'status': 'missing'}) for p in all_sources}
         for p, info in statuses.items():
             if info['status'] == 'escape_error':
                 raise SshMigrationError(f'Legacy source path escapes source root: {p}')
+            if info['status'] == 'symlink_error':
+                raise SshMigrationError(f'Legacy source path is a symlink inside source root: {p}')
             if info['status'] == 'permission_denied':
                 raise SshMigrationError(f'Permission denied reading legacy source {p} on remote host; check SSH user permissions')
             if info['status'] == 'not_a_file':
@@ -720,7 +896,8 @@ def cmd_import_secrets(root: Path, manifest: dict, args: argparse.Namespace) -> 
         if missing:
             stack_remote_dir = posixpath.normpath(posixpath.join(source_root_real, entry['directory']))
             has_containers = stack_remote_dir in deployed_dirs
-            if args.all_stacks and args.skip_not_deployed and len(missing) == len(all_sources) and not has_containers:
+            is_required_dep = name in required_dependencies
+            if args.all_stacks and args.skip_not_deployed and len(missing) == len(all_sources) and not has_containers and not is_required_dep:
                 skipped_not_deployed.append(name)
                 print(f'SKIPPED (not deployed): {args.host}/{name}')
                 continue
@@ -846,8 +1023,50 @@ def cmd_prepare(root: Path, manifest: dict, args: argparse.Namespace) -> int:
     return 0
 
 
+def _detect_stack_compose_home(
+    services: dict[str, dict],
+    declared_vols: set[str],
+    matched: list[dict],
+    remote_stack_dir: str,
+    remote_home: str,
+    sudo_home: str | None,
+    env_map: dict[str, str],
+) -> str:
+    """Resolve whether ~ bind mounts match remote_home (default) or sudo_home under --docker-sudo."""
+    if not sudo_home or sudo_home == remote_home:
+        return remote_home
+    by_svc = {c.get('service'): c for c in matched if c.get('service')}
+    matched_sudo = False
+    matched_user = False
+    for sname, scfg in services.items():
+        if sname not in by_svc:
+            continue
+        audited_binds = {
+            posixpath.normpath(str(m.get('Destination') or '')): posixpath.normpath(str(m.get('Source') or ''))
+            for m in (by_svc[sname].get('mounts') or [])
+            if m.get('Type') == 'bind' and m.get('Destination')
+        }
+        user_mounts = parse_compose_mounts(scfg, declared_vols, remote_stack_dir, remote_home, env_map)
+        sudo_mounts = parse_compose_mounts(scfg, declared_vols, remote_stack_dir, sudo_home, env_map)
+        for um, sm in zip(user_mounts, sudo_mounts):
+            if um['type'] != 'bind' or not str(um.get('raw_source', '')).startswith('~/'):
+                continue
+            asrc = audited_binds.get(posixpath.normpath(um['destination']))
+            if not asrc:
+                continue
+            if asrc == sm['source']:
+                matched_sudo = True
+            elif asrc == um['source']:
+                matched_user = True
+    if matched_sudo and not matched_user:
+        return sudo_home
+    return remote_home
+
+
 def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Namespace) -> int:
     plan_path = ensure_outside_repo(root, args.plan, 'Adoption plan')
+    if args.rollback_base:
+        validate_remote_path(args.rollback_base, 'Rollback base')
     catalog = discover_host_stacks(root, manifest, args.host)
 
     if args.all_stacks:
@@ -864,13 +1083,87 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             if name not in selected_names:
                 selected_names.append(name)
 
-    secrets: set[str] = set()
-    # Pre-decrypt managed stacks + dependencies on controller (in memory only)
-    stack_secret_state: dict[str, dict] = {}
-    probe_rel_paths: set[str] = set()
+    ssh = SshClient(args.ssh_target, args.ssh_bin, args.ssh_config, args.ssh_identity, args.ssh_port, args.connect_timeout)
+
+    # Step 1: Audit remote host FIRST (before decrypting SOPS!) so --skip-not-deployed works cleanly
+    audit_resp = ssh.call({
+        'action': 'audit',
+        'source_root': validate_remote_path(args.source_root, 'Source root'),
+        'probe_paths': [],
+        'docker_sudo': args.docker_sudo,
+    })
+    check_docker_errors(audit_resp, 'plan audit')
+    require_compose_version(audit_resp.get('compose_version'))
+
+    executing_hostname = audit_resp.get('hostname')
+    remote_root_real = posixpath.normpath(audit_resp['source_root_realpath'])
+    remote_home = posixpath.normpath(audit_resp['home_dir'])
+    sudo_home_dir = posixpath.normpath(audit_resp['sudo_home_dir']) if audit_resp.get('sudo_home_dir') else None
+    all_containers = audit_resp.get('containers', [])
+    remote_volumes = audit_resp.get('volumes', {})
+    remote_images = audit_resp.get('images', {})
+
+    # Step 2: Match deployed containers & filter undeployed stacks BEFORE decrypting SOPS
+    deployed_names: list[str] = []
+    skipped_stacks: list[str] = []
+    matched_by_stack: dict[str, list[dict]] = {}
+    compose_by_stack: dict[str, tuple[dict, dict, list[str]]] = {}
 
     for name in selected_names:
         entry = catalog[name]
+        services, declared_vols, extra_cfs = load_merged_compose(root, entry)
+        compose_by_stack[name] = (services, declared_vols, extra_cfs)
+        remote_stack_dir = posixpath.normpath(posixpath.join(remote_root_real, entry['directory']))
+
+        matched = [
+            c for c in all_containers
+            if c.get('working_dir') and posixpath.normpath(c['working_dir']) == remote_stack_dir
+        ]
+
+        # Detect directory drift / container_name collisions elsewhere
+        expected_cnames = {
+            '/' + str(scfg['container_name']).lstrip('/')
+            for scfg in services.values()
+            if scfg.get('container_name')
+        }
+        for c in all_containers:
+            if c in matched:
+                continue
+            cname = '/' + str(c.get('name', '')).lstrip('/')
+            if cname in expected_cnames:
+                raise SshMigrationError(
+                    f'Container {cname} for stack "{name}" is running from a different directory '
+                    f'({c.get("working_dir")}) than expected ({remote_stack_dir}); refusing ambiguous adoption'
+                )
+
+        if not matched:
+            if args.all_stacks and args.skip_not_deployed:
+                skipped_stacks.append(name)
+                print(f'SKIPPED (not deployed): {args.host}/{name}')
+                continue
+            raise SshMigrationError(
+                f'Stack "{name}" has no audited containers at {remote_stack_dir}; '
+                'in-place adoption only applies to deployed stacks'
+            )
+
+        deployed_names.append(name)
+        matched_by_stack[name] = matched
+
+    if not deployed_names:
+        raise SshMigrationError('No deployed stacks matched selection; nothing to plan')
+
+    # Step 3: Decrypt SOPS ONLY for deployed stacks, gather probe paths, bind mount checks, and image refs
+    secrets: set[str] = set()
+    stack_secret_state: dict[str, dict] = {}
+    probe_rel_paths: set[str] = set()
+    extra_check_paths: set[str] = set()
+    inspect_image_refs: set[str] = set()
+    proposed_mounts_by_stack: dict[str, dict[str, list[dict]]] = {}
+    compose_home_by_stack: dict[str, str] = {}
+
+    for name in deployed_names:
+        entry = catalog[name]
+        services, declared_vols, _ = compose_by_stack[name]
         dep_names: list[str] = []
         if entry['kind'] == 'managed':
             all_names = expand_manifest_selection(manifest[args.host], [name], False)
@@ -908,6 +1201,31 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
         probe_rel_paths.update(legacy_rels)
         probe_rel_paths.add(f'{entry["directory"]}/{OVERRIDE_FILENAME}')
 
+        remote_stack_dir = posixpath.normpath(posixpath.join(remote_root_real, entry['directory']))
+        compose_home = _detect_stack_compose_home(
+            services,
+            set(declared_vols.keys()),
+            matched_by_stack[name],
+            remote_stack_dir,
+            remote_home,
+            sudo_home_dir if args.docker_sudo else None,
+            primary_env_map,
+        )
+        compose_home_by_stack[name] = compose_home
+
+        per_svc: dict[str, list[dict]] = {}
+        for sname, scfg in services.items():
+            mounts = parse_compose_mounts(scfg, set(declared_vols.keys()), remote_stack_dir, compose_home, primary_env_map)
+            per_svc[sname] = mounts
+            for m in mounts:
+                if m['type'] == 'bind':
+                    extra_check_paths.add(m['source'])
+            if scfg.get('image'):
+                repo_img = interpolate_value(str(scfg['image']), primary_env_map)
+                if repo_img and not repo_img.startswith('-'):
+                    inspect_image_refs.add(repo_img)
+        proposed_mounts_by_stack[name] = per_svc
+
         stack_secret_state[name] = {
             'entry': entry,
             'dep_names': dep_names,
@@ -919,113 +1237,60 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             'legacy_rels': sorted(legacy_rels),
         }
 
-    ssh = SshClient(args.ssh_target, args.ssh_bin, args.ssh_config, args.ssh_identity, args.ssh_port, args.connect_timeout)
-    audit_resp = ssh.call(
+    # Step 4: Lightweight single remote call to probe files, check bind paths, and resolve repo image IDs
+    inspect_resp = ssh.call(
         {
-            'action': 'audit',
+            'action': 'inspect_paths',
             'source_root': validate_remote_path(args.source_root, 'Source root'),
             'probe_paths': sorted(probe_rel_paths),
+            'check_paths': sorted(extra_check_paths),
+            'inspect_images': sorted(inspect_image_refs),
             'docker_sudo': args.docker_sudo,
         },
         secrets=secrets,
     )
-    if not audit_resp.get('compose_version'):
-        raise SshMigrationError('Docker Compose v2 is not available on the remote host')
+    probed_files = inspect_resp.get('probed_files', {})
+    checked_paths = inspect_resp.get('checked_paths', {})
+    resolved_images = inspect_resp.get('resolved_images', {})
 
-    remote_root_real = posixpath.normpath(audit_resp['source_root_realpath'])
-    remote_home = posixpath.normpath(audit_resp['home_dir'])
-    all_containers = audit_resp.get('containers', [])
-    remote_volumes = audit_resp.get('volumes', {})
-    remote_images = audit_resp.get('images', {})
-    probed_files = audit_resp.get('probed_files', {})
-
-    # Collect bind mount host paths to verify existence on remote
-    proposed_mounts_by_stack: dict[str, dict[str, list[dict]]] = {}
-    extra_check_paths: set[str] = set()
-    for name in selected_names:
-        st = stack_secret_state[name]
-        entry = st['entry']
-        services, declared_vols, _ = load_merged_compose(root, entry)
-        remote_stack_dir = posixpath.normpath(posixpath.join(remote_root_real, entry['directory']))
-        per_svc: dict[str, list[dict]] = {}
-        for sname, scfg in services.items():
-            mounts = parse_compose_mounts(scfg, set(declared_vols.keys()), remote_stack_dir, remote_home, st['primary_env_map'])
-            per_svc[sname] = mounts
-            for m in mounts:
-                if m['type'] == 'bind':
-                    extra_check_paths.add(m['source'])
-        proposed_mounts_by_stack[name] = per_svc
-
-    checked_paths: dict[str, dict] = {}
-    if extra_check_paths:
-        chk_resp = ssh.call(
-            {
-                'action': 'audit',
-                'source_root': validate_remote_path(args.source_root, 'Source root'),
-                'probe_paths': [],
-                'check_paths': sorted(extra_check_paths),
-                'docker_sudo': args.docker_sudo,
-            },
-            secrets=secrets,
-        )
-        checked_paths = chk_resp.get('checked_paths', {})
-
+    # Step 5: Validate each deployed stack and construct the hashed adoption plan
     planned_stacks: dict[str, dict] = {}
-    skipped_stacks: list[str] = []
-
-    for name in selected_names:
+    for name in deployed_names:
         st = stack_secret_state[name]
         entry = st['entry']
-        services, declared_vols, _ = load_merged_compose(root, entry)
+        services, declared_vols, _ = compose_by_stack[name]
+        matched = matched_by_stack[name]
         remote_stack_dir = posixpath.normpath(posixpath.join(remote_root_real, entry['directory']))
-
-        # Check for containers at this exact working_dir
-        matched = [
-            c for c in all_containers
-            if c.get('working_dir') and posixpath.normpath(c['working_dir']) == remote_stack_dir
-        ]
-
-        # Detect directory drift / container_name collisions elsewhere
-        expected_cnames = {
-            '/' + str(scfg['container_name']).lstrip('/')
-            for scfg in services.values()
-            if scfg.get('container_name')
-        }
-        for c in all_containers:
-            if c in matched:
-                continue
-            cname = '/' + str(c.get('name', '')).lstrip('/')
-            if cname in expected_cnames:
-                raise SshMigrationError(
-                    f'Container {cname} for stack "{name}" is running from a different directory '
-                    f'({c.get("working_dir")}) than expected ({remote_stack_dir}); refusing ambiguous adoption'
-                )
-
-        if not matched:
-            if args.all_stacks and args.skip_not_deployed:
-                skipped_stacks.append(name)
-                print(f'SKIPPED (not deployed): {args.host}/{name}')
-                continue
-            raise SshMigrationError(
-                f'Stack "{name}" has no audited containers at {remote_stack_dir}; '
-                'in-place adoption only applies to deployed stacks'
-            )
-
-        # Refuse automatic cutover for stacks with one-shot schema migration services!
-        oneshots = detect_oneshot_services(services)
-        if oneshots:
-            raise SshMigrationError(
-                f'Stack "{name}" defines one-shot schema migration service(s) ({", ".join(oneshots)}); '
-                'refusing automatic adoption so migrations are never executed unattended. '
-                'See docs/MIGRATION.md for manual adoption steps.'
-            )
+        compose_home = compose_home_by_stack[name]
 
         projects = {c.get('project') for c in matched}
         if None in projects or '' in projects or len(projects) != 1:
             raise SshMigrationError(
                 f'Stack "{name}" has ambiguous or missing Compose project labels ({sorted(str(p) for p in projects)})'
             )
-        project_name = next(iter(projects))
+        project_name = str(next(iter(projects)))
+        if not PROJECT_NAME_RE.fullmatch(project_name):
+            raise SshMigrationError(f'Stack "{name}" has invalid Compose project name "{project_name}"')
+
+        # Capture original compose files & fail closed if unknown local override files are active
+        orig_cf_set: list[str] = []
+        for c in matched:
+            for item in str(c.get('config_files') or '').split(','):
+                item = item.strip()
+                if item:
+                    norm_item = posixpath.normpath(item)
+                    if norm_item not in orig_cf_set:
+                        orig_cf_set.append(norm_item)
+        expected_cfs = {posixpath.normpath(posixpath.join(remote_stack_dir, cf)) for cf in entry['compose']}
+        allowed_cfs = expected_cfs | {posixpath.normpath(posixpath.join(remote_stack_dir, OVERRIDE_FILENAME))}
+        extra_local_cfs = sorted(cf for cf in orig_cf_set if cf not in allowed_cfs)
+        if extra_local_cfs:
+            raise SshMigrationError(
+                f'Stack "{name}" is running with extra local Compose file(s) ({", ".join(extra_local_cfs)}) '
+                'not tracked by the deployment manifest; merge or remove them before adoption so local overrides are not silently dropped.'
+            )
+        if not orig_cf_set:
+            orig_cf_set = [posixpath.normpath(posixpath.join(remote_stack_dir, cf)) for cf in entry['compose']]
 
         by_service: dict[str, dict] = {}
         for c in matched:
@@ -1036,56 +1301,180 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                 raise SshMigrationError(f'Multiple containers found for service {name}/{svc}; refusing ambiguous adoption')
             by_service[svc] = c
 
-        # Detect removed or newly added services
+        # Detect removed services
         removed_svcs = sorted(set(by_service.keys()) - set(services.keys()))
         if removed_svcs:
             raise SshMigrationError(
                 f'Stack "{name}" has running service(s) missing from repo Compose ({", ".join(removed_svcs)}); '
                 'refusing silent service removal'
             )
-        new_svcs = sorted(set(services.keys()) - set(by_service.keys()))
+
+        # Classify one-shot services (e.g. hiring_scraper migrate) safely instead of blocking whole stack
+        oneshots = detect_oneshot_services(services)
+        oneshot_set = set(oneshots)
+        non_oneshot_deployed = [s for s in by_service if s not in oneshot_set]
+        if not non_oneshot_deployed:
+            raise SshMigrationError(
+                f'Stack "{name}" has no deployed long-lived services (only one-shot container(s): {", ".join(sorted(by_service))}); '
+                'refusing adoption'
+            )
+
+        oneshot_before: dict[str, dict] = {}
+        for os_svc in oneshots:
+            audited_os = by_service.get(os_svc)
+            if audited_os:
+                if audited_os.get('running'):
+                    raise SshMigrationError(
+                        f'One-shot service {name}/{os_svc} is currently running; wait for completion before adopting'
+                    )
+                exit_code = audited_os.get('exit_code')
+                if exit_code != 0:
+                    raise SshMigrationError(
+                        f'One-shot service {name}/{os_svc} exited with non-zero status ({exit_code}); '
+                        'resolve the failed migration before adopting'
+                    )
+                oneshot_before[os_svc] = {'present': True, 'id': audited_os.get('id')}
+            else:
+                oneshot_before[os_svc] = {'present': False, 'id': None}
+
+        # Newly introduced long-lived services (exclude pruned one-shots!)
+        new_svcs = sorted(s for s in services if s not in by_service and s not in oneshot_set)
         if new_svcs and not args.allow_new_services:
             raise SshMigrationError(
                 f'Stack "{name}" introduces new service(s) not currently deployed ({", ".join(new_svcs)}); '
                 'review first and rerun with --allow-new-services once their images are locally cached'
             )
 
-        # Image identity & drift validation
-        pinned_images: dict[str, str] = {}
+        # Image identity, conditional pinning, and running/stopped classification
+        override_pinned_images: dict[str, str] = {}
+        expected_service_images: dict[str, str] = {}
+        rollback_pinned_images: dict[str, dict] = {}
         image_drift_pinned: list[str] = []
+        stack_warnings: list[str] = []
         service_records: dict[str, dict] = {}
+        originally_running: list[str] = []
+        originally_stopped: list[str] = []
 
         for sname, scfg in services.items():
+            if sname in oneshot_set:
+                audited_os = by_service.get(sname)
+                if audited_os:
+                    os_img_id = audited_os.get('image')
+                    os_cfg_img = str(audited_os.get('configured_image') or '')
+                    if scfg.get('image'):
+                        repo_img = interpolate_value(str(scfg['image']), st['primary_env_map'])
+                        if (
+                            resolved_images.get(repo_img) != os_img_id
+                            and normalize_image_ref(repo_img) != normalize_image_ref(os_cfg_img)
+                            and not args.pin_running_images
+                        ):
+                            raise SshMigrationError(
+                                f'Unreviewed image/schema change for one-shot {name}/{sname}: '
+                                f'last run "{os_cfg_img}" vs repo "{repo_img}". '
+                                'Review schema compatibility or pass --pin-running-images to adopt without bumping.'
+                            )
+                    service_records[sname] = {
+                        'oneshot': True,
+                        'container_present': True,
+                        'container_name': audited_os.get('name'),
+                        'image_id': os_img_id,
+                        'configured_image': os_cfg_img,
+                        'running': False,
+                        'exit_code': 0,
+                    }
+                else:
+                    service_records[sname] = {
+                        'oneshot': True,
+                        'container_present': False,
+                        'running': False,
+                    }
+                continue
+
             if sname in new_svcs:
                 raw_img = interpolate_value(str(scfg.get('image', '')), st['primary_env_map'])
                 if not raw_img:
                     raise SshMigrationError(f'New service {name}/{sname} requires a concrete image (builds are not run during adoption)')
-                service_records[sname] = {'new_service': True, 'repo_image': raw_img}
+                new_img_id = resolved_images.get(raw_img)
+                if not new_img_id:
+                    raise SshMigrationError(
+                        f'New service {name}/{sname} image "{raw_img}" is not available locally on remote host; '
+                        'pull it first before running adoption with --pull never'
+                    )
+                expected_service_images[sname] = new_img_id
+                service_records[sname] = {
+                    'new_service': True,
+                    'oneshot': False,
+                    'repo_image': raw_img,
+                    'image_id': new_img_id,
+                    'running': True,
+                }
                 continue
+
             audited = by_service[sname]
             img_id = audited.get('image')
             if not img_id or not remote_images.get(img_id, {}).get('exists'):
                 raise SshMigrationError(f'Audited running image ID for {name}/{sname} is not available locally on remote host')
             audited_cfg_img = str(audited.get('configured_image') or '')
+            expected_service_images[sname] = img_id
+            is_running = bool(audited.get('running'))
+            if is_running:
+                originally_running.append(sname)
+                rollback_pinned_images[sname] = {
+                    'image_id': img_id,
+                    'configured_image': audited_cfg_img,
+                }
+            else:
+                originally_stopped.append(sname)
+
             if 'build' in scfg and not scfg.get('image'):
-                pinned_images[sname] = img_id
+                override_pinned_images[sname] = img_id
             else:
                 repo_img = interpolate_value(str(scfg.get('image') or ''), st['primary_env_map'])
-                if normalize_image_ref(repo_img) != normalize_image_ref(audited_cfg_img):
-                    if not args.pin_running_images:
-                        raise SshMigrationError(
-                            f'Unreviewed image/schema change for {name}/{sname}: '
-                            f'running "{audited_cfg_img}" vs repo "{repo_img}". '
-                            'Review schema compatibility or pass --pin-running-images to lock to the running image.'
+                repo_resolved_id = resolved_images.get(repo_img)
+                if repo_resolved_id == img_id:
+                    # Local repo_img tag already resolves to the exact running image ID:
+                    # do NOT overwrite image: with sha256:<id> (preserves Watchtower & idempotent re-plan!)
+                    pass
+                else:
+                    if normalize_image_ref(repo_img) != normalize_image_ref(audited_cfg_img):
+                        if not args.pin_running_images:
+                            raise SshMigrationError(
+                                f'Unreviewed image/schema change for {name}/{sname}: '
+                                f'running "{audited_cfg_img}" vs repo "{repo_img}". '
+                                'Review schema compatibility or pass --pin-running-images to lock to the running image.'
+                            )
+                        image_drift_pinned.append(sname)
+                        msg = (
+                            f'Pinned {name}/{sname} to running image {img_id[:19]} (--pin-running-images); '
+                            'Watchtower tag tracking is paused while override pin is present'
                         )
-                    image_drift_pinned.append(sname)
-                pinned_images[sname] = img_id
+                        stack_warnings.append(msg)
+                        print(f'WARNING: {msg}', file=sys.stderr)
+                    else:
+                        msg = (
+                            f'Local tag "{repo_img}" does not resolve to running image ID for {name}/{sname}; '
+                            f'pinning to {img_id[:19]} in adoption override (Watchtower tag tracking paused while pinned)'
+                        )
+                        stack_warnings.append(msg)
+                        print(f'WARNING: {msg}', file=sys.stderr)
+                    override_pinned_images[sname] = img_id
+
             service_records[sname] = {
                 'container_name': audited.get('name'),
                 'image_id': img_id,
                 'configured_image': audited_cfg_img,
-                'running': bool(audited.get('running')),
+                'running': is_running,
+                'oneshot': False,
+                'new_service': False,
             }
+
+        originally_running.sort()
+        originally_stopped.sort()
+        expected_running = sorted(set(originally_running + new_svcs))
+
+        # Build dependency-ordered start waves (honoring depends_on & healthchecks while using --no-deps)
+        start_waves = build_start_waves(services, expected_running, oneshot_set)
+        rollback_start_waves = build_start_waves(services, originally_running, oneshot_set)
 
         # Mount & named volume identity validation
         secret_remote_paths = {
@@ -1097,6 +1486,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             for rel in st['staged_repo_rels']
         }
         pinned_volumes: dict[str, str] = {}
+        ignored_anonymous_volumes: list[dict] = []
 
         for sname, scfg in services.items():
             proposed = proposed_mounts_by_stack[name][sname]
@@ -1112,6 +1502,9 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                     if atype == 'volume':
                         vname = am.get('Name')
                         if not pm or pm['type'] != 'volume':
+                            if is_anonymous_volume(vname, remote_volumes.get(vname)):
+                                ignored_anonymous_volumes.append({'service': sname, 'destination': dst, 'volume': vname})
+                                continue
                             raise SshMigrationError(
                                 f'Incompatible mount for {name}/{sname}:{dst}: audited container uses named volume "{vname}" '
                                 'but repo Compose does not preserve a named volume at that destination'
@@ -1130,6 +1523,20 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                         if pm and pm['type'] == 'bind' and pm['source'] in secret_remote_paths:
                             # Intentional SOPS secret file migration (e.g. legacy token -> .secrets/token)
                             continue
+                        if not pm and asrc == '/var/run/docker.sock' and dst == '/var/run/docker.sock':
+                            # Allow Traefik docker.sock -> socket-proxy transition when another service in this stack mounts it
+                            other_mounts_sock = any(
+                                other_svc != sname
+                                and any(
+                                    om['type'] == 'bind'
+                                    and om['source'] == '/var/run/docker.sock'
+                                    and posixpath.normpath(om['destination']) == '/var/run/docker.sock'
+                                    for om in proposed_mounts_by_stack[name].get(other_svc, [])
+                                )
+                                for other_svc in services
+                            )
+                            if other_mounts_sock:
+                                continue
                         if not pm or pm['type'] != 'bind':
                             raise SshMigrationError(
                                 f'Incompatible mount for {name}/{sname}:{dst}: audited container uses bind mount "{asrc}" '
@@ -1144,6 +1551,9 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                             )
 
             # Verify no proposed named volume is unpinned (would create a new empty volume!)
+            # Skip pruned one-shots that will not be started during adoption
+            if sname in oneshot_set and sname not in by_service:
+                continue
             for pm in proposed:
                 if pm['type'] == 'volume':
                     vkey = pm['volume_key']
@@ -1156,7 +1566,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                     psrc = pm['source']
                     if psrc in secret_remote_paths or psrc in staged_remote_paths:
                         continue
-                    # Also allow parent directory of a staged file (e.g., ./config when ./config/app.conf is staged)
+                    # Also allow parent directory of a staged/secret file (e.g. ./config when ./config/traefik.yaml is staged)
                     if any(sp.startswith(psrc + '/') for sp in staged_remote_paths | secret_remote_paths):
                         continue
                     if not checked_paths.get(psrc, {}).get('exists'):
@@ -1165,29 +1575,64 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                             'does not exist on remote host; refusing to auto-create an empty directory'
                         )
 
-        # Build Compose adoption override pinning exact running images & external named volumes
+        # Build expected post-apply mount expectations for every expected running service
+        expected_service_mounts: dict[str, list[dict]] = {}
+        for sname in expected_running:
+            exp_list = []
+            for pm in proposed_mounts_by_stack[name].get(sname, []):
+                if pm['type'] == 'volume':
+                    exp_list.append({
+                        'type': 'volume',
+                        'name': pinned_volumes[pm['volume_key']],
+                        'destination': posixpath.normpath(pm['destination']),
+                    })
+                elif pm['type'] == 'bind':
+                    psrc = pm['source']
+                    chk = checked_paths.get(psrc, {})
+                    exp_list.append({
+                        'type': 'bind',
+                        'source': psrc,
+                        'source_realpath': posixpath.normpath(chk.get('realpath', psrc)),
+                        'destination': posixpath.normpath(pm['destination']),
+                    })
+            expected_service_mounts[sname] = exp_list
+
+        # Build Compose adoption override ONLY when pinning images or external named volumes is needed
         override_doc: dict = {}
-        if pinned_images:
-            override_doc['services'] = {s: {'image': img} for s, img in sorted(pinned_images.items())}
+        if override_pinned_images:
+            override_doc['services'] = {s: {'image': img} for s, img in sorted(override_pinned_images.items())}
         if pinned_volumes:
             override_doc['volumes'] = {
                 vkey: {'external': True, 'name': vname}
                 for vkey, vname in sorted(pinned_volumes.items())
             }
-        override_yaml = '# Generated by scripts/ssh-migrate.py to preserve running image and volume identities.\n' + (
-            yaml.safe_dump(override_doc, sort_keys=False) if override_doc else '{}\n'
+        use_override = bool(override_doc)
+        override_yaml = (
+            '# Generated by scripts/ssh-migrate.py to preserve running image and volume identities.\n'
+            + yaml.safe_dump(override_doc, sort_keys=False)
+            if use_override
+            else ''
         )
         override_bytes = override_yaml.encode('utf-8')
 
-        # Build staged_files manifest (non-secret repo files) + secret_outputs hashes (NO plaintext!)
+        # Build staged_files manifest + secret_outputs hashes + remote_file_hashes (NO plaintext!)
         staged_files_plan = []
         remote_file_hashes: dict[str, str | None] = {}
+
+        def _check_probed(rel: str, label: str) -> dict:
+            pinfo = probed_files.get(rel, {})
+            if pinfo.get('escape_error'):
+                raise SshMigrationError(f'Remote path escapes source root ({label}): {rel}')
+            if pinfo.get('is_symlink'):
+                raise SshMigrationError(f'Refusing symlink at remote {label} path: {rel}')
+            if pinfo.get('permission_denied'):
+                raise SshMigrationError(f'Permission denied probing remote {label}: {rel}')
+            return pinfo
+
         for rel in st['staged_repo_rels']:
             local_file = inside(root, rel)
             expected_sha = sha256_file(local_file)
-            pinfo = probed_files.get(rel, {})
-            if pinfo.get('permission_denied'):
-                raise SshMigrationError(f'Permission denied probing remote file {rel}')
+            pinfo = _check_probed(rel, 'staged file')
             before_sha = pinfo.get('sha256') if pinfo.get('exists') else None
             remote_file_hashes[rel] = before_sha
             action = 'unchanged' if before_sha == expected_sha else ('update' if before_sha else 'create')
@@ -1202,9 +1647,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
 
         secret_outputs_plan = []
         for rel, (raw_bytes, kind) in sorted(st['secret_outputs'].items()):
-            pinfo = probed_files.get(rel, {})
-            if pinfo.get('permission_denied'):
-                raise SshMigrationError(f'Permission denied probing remote secret target {rel}')
+            pinfo = _check_probed(rel, 'secret target')
             before_sha = pinfo.get('sha256') if pinfo.get('exists') else None
             remote_file_hashes[rel] = before_sha
             secret_outputs_plan.append({
@@ -1216,32 +1659,26 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                 'kind': kind,
             })
 
-        # Archive legacy files that exist on remote and are NOT overwritten in-place by new outputs
+        # Track override file presence/hash for drift detection too!
+        override_rel = f'{entry["directory"]}/{OVERRIDE_FILENAME}'
+        ov_info = _check_probed(override_rel, 'adoption override')
+        remote_file_hashes[override_rel] = ov_info.get('sha256') if ov_info.get('exists') else None
+
+        # Archive legacy files that exist on remote and are NOT overwritten in-place; track ALL legacy paths in drift hashes
         new_output_rels = set(st['secret_outputs'].keys()) | set(st['staged_repo_rels'])
         legacy_to_archive = []
         for rel in st['legacy_rels']:
             if rel in new_output_rels:
                 continue
-            pinfo = probed_files.get(rel, {})
-            if pinfo.get('permission_denied'):
-                raise SshMigrationError(f'Permission denied probing legacy file {rel}')
+            pinfo = _check_probed(rel, 'legacy file')
+            before_sha = pinfo.get('sha256') if pinfo.get('exists') else None
+            remote_file_hashes[rel] = before_sha
             if pinfo.get('exists'):
-                remote_file_hashes[rel] = pinfo.get('sha256')
                 legacy_to_archive.append({
                     'repo_rel': rel,
                     'remote_path': posixpath.normpath(posixpath.join(remote_root_real, rel)),
-                    'remote_before_sha256': pinfo.get('sha256'),
+                    'remote_before_sha256': before_sha,
                 })
-
-        # Capture original compose files from audited labels (for rollback)
-        orig_cf_set: list[str] = []
-        for c in matched:
-            for item in str(c.get('config_files') or '').split(','):
-                item = item.strip()
-                if item and item not in orig_cf_set:
-                    orig_cf_set.append(item)
-        if not orig_cf_set:
-            orig_cf_set = [posixpath.normpath(posixpath.join(remote_stack_dir, cf)) for cf in entry['compose']]
 
         fingerprint = compute_remote_fingerprint(matched, pinned_volumes, remote_file_hashes)
         primary_env_remote = (
@@ -1259,12 +1696,25 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             'original_compose_files': orig_cf_set,
             'project_name': project_name,
             'remote_stack_dir': remote_stack_dir,
+            'compose_home': compose_home,
             'primary_env_file': primary_env_remote,
             'services': service_records,
-            'expected_running_services': sorted(s for s, info in service_records.items() if info.get('running')),
-            'pinned_images': pinned_images,
+            'originally_running_services': originally_running,
+            'expected_running_services': expected_running,
+            'expected_stopped_services': originally_stopped,
+            'oneshot_services': oneshots,
+            'oneshot_before': oneshot_before,
+            'new_services': new_svcs,
+            'start_waves': start_waves,
+            'rollback_start_waves': rollback_start_waves,
+            'pinned_images': override_pinned_images,
+            'expected_service_images': expected_service_images,
+            'rollback_pinned_images': rollback_pinned_images,
+            'expected_service_mounts': expected_service_mounts,
             'image_drift_pinned': image_drift_pinned,
             'pinned_volumes': pinned_volumes,
+            'ignored_anonymous_volumes': ignored_anonymous_volumes,
+            'use_override': use_override,
             'override_filename': OVERRIDE_FILENAME,
             'override_yaml': override_yaml,
             'override_sha256': sha256_bytes(override_bytes),
@@ -1273,24 +1723,27 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             'secret_outputs': secret_outputs_plan,
             'legacy_files_to_archive': legacy_to_archive,
             'remote_file_hashes': remote_file_hashes,
+            'warnings': stack_warnings,
             'remote_state_fingerprint': fingerprint,
         }
-
-    if not planned_stacks:
-        raise SshMigrationError('No deployed stacks matched selection; nothing to plan')
 
     now = datetime.now(timezone.utc)
     git_head, git_dirty = git_repo_revision(root)
     plan_id = f'{args.host}-{now.strftime("%Y%m%dT%H%M%SZ")}-{sha256_bytes(canonical_json_bytes(planned_stacks))[:8]}'
     rollback_base = args.rollback_base or posixpath.join(remote_home, '.homelab-migration-rollback')
-    rollback_dir = posixpath.normpath(posixpath.join(rollback_base, args.host, plan_id))
+    rollback_dir = ensure_remote_rollback_disjoint(
+        posixpath.join(rollback_base, args.host, plan_id),
+        remote_root_real,
+    )
 
     plan = {
-        'plan_version': 1,
+        'plan_version': 2,
         'plan_id': plan_id,
         'created_at': now.isoformat(),
         'host': args.host,
         'ssh_target': args.ssh_target,
+        'docker_sudo': bool(args.docker_sudo),
+        'executing_hostname': executing_hostname,
         'remote_root': remote_root_real,
         'rollback_dir': rollback_dir,
         'repo_git_head': git_head,
@@ -1307,6 +1760,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
         changes = [f'{f["action"]}:{f["repo_rel"]}' for f in sp['staged_files'] if f['action'] != 'unchanged']
         print(
             f'  - {sname} [{sp["kind"]}]: project={sp["project_name"]}, '
+            f'waves={len(sp["start_waves"])}, pinned_images={len(sp["pinned_images"])}, '
             f'pinned_volumes={len(sp["pinned_volumes"])}, secret_outputs={len(sp["secret_outputs"])}, '
             f'archived_legacy={len(sp["legacy_files_to_archive"])}, file_changes={changes or ["none"]}'
         )
@@ -1321,6 +1775,8 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
     recorded_digest = plan.get('plan_digest')
     if not recorded_digest or compute_plan_digest(plan) != recorded_digest:
         raise SshMigrationError('Plan digest verification failed; plan file was modified or corrupted after generation')
+
+    ensure_remote_rollback_disjoint(plan['rollback_dir'], plan['remote_root'])
 
     # Gate 2: Require explicit operator acknowledgement & evidence of a tested application-data backup
     if not args.confirm_backup_tested or not (args.backup_evidence or '').strip():
@@ -1369,6 +1825,7 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
                 'mode': fitem['mode'],
                 'is_secret': False,
             })
+            all_writable_dirs.add(posixpath.dirname(fitem['remote_path']))
 
         # Re-decrypt SOPS inputs on controller and verify hashes match plan
         decrypted_outputs: dict[str, bytes] = {}
@@ -1393,9 +1850,14 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
                 'mode': 0o600,
                 'is_secret': True,
             })
+            all_writable_dirs.add(posixpath.dirname(soutput['remote_path']))
+
+        for leg in sp.get('legacy_files_to_archive', []):
+            all_writable_dirs.add(posixpath.dirname(leg['remote_path']))
 
         all_probe_rels.update(sp['remote_file_hashes'].keys())
-        all_check_images.update(sp['pinned_images'].values())
+        all_check_images.update(sp.get('pinned_images', {}).values())
+        all_check_images.update(sp.get('expected_service_images', {}).values())
         for svc_info in sp.get('services', {}).values():
             if svc_info.get('new_service') and svc_info.get('repo_image'):
                 all_check_images.add(svc_info['repo_image'])
@@ -1404,10 +1866,10 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
 
         stack_payloads[sname] = {
             'staged_files': staged_payload,
-            'override_b64': base64.b64encode(sp['override_yaml'].encode('utf-8')).decode('ascii'),
+            'override_b64': base64.b64encode(sp.get('override_yaml', '').encode('utf-8')).decode('ascii'),
         }
 
-    # Gate 5: Remote read-only preflight verifying zero remote drift across ALL stacks before ANY mutation!
+    # Gate 5: Remote read-only preflight verifying host identity, Compose >= 2.30, permissions & zero drift!
     ssh_target = args.ssh_target or plan['ssh_target']
     ssh = SshClient(ssh_target, args.ssh_bin, args.ssh_config, args.ssh_identity, args.ssh_port, args.connect_timeout)
     pre = ssh.call(
@@ -1419,16 +1881,23 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
             'check_images': sorted(all_check_images),
             'check_volumes': sorted(all_check_volumes),
             'writable_dirs': sorted(all_writable_dirs),
-            'docker_sudo': args.docker_sudo,
+            'docker_sudo': bool(args.docker_sudo or plan.get('docker_sudo')),
         },
         secrets=secrets,
     )
+    check_docker_errors(pre, 'apply preflight')
+    require_compose_version(pre.get('compose_version'))
+    if plan.get('executing_hostname') and pre.get('hostname') != plan['executing_hostname']:
+        raise SshMigrationError(
+            f'Remote hostname mismatch: plan was generated for "{plan["executing_hostname"]}", '
+            f'but target "{ssh_target}" reported "{pre.get("hostname")}"'
+        )
     if pre.get('missing_images'):
-        raise SshMigrationError(f'Pinned image(s) missing on remote host: {", ".join(pre["missing_images"])}')
+        raise SshMigrationError(f'Required image(s) missing on remote host: {", ".join(pre["missing_images"])}')
     if pre.get('missing_volumes'):
         raise SshMigrationError(f'Pinned Docker volume(s) missing on remote host: {", ".join(pre["missing_volumes"])}')
     if pre.get('unwritable_dirs'):
-        raise SshMigrationError(f'Remote stack directory not writable: {", ".join(pre["unwritable_dirs"])}')
+        raise SshMigrationError(f'Remote target directory not writable: {", ".join(pre["unwritable_dirs"])}')
     if pre.get('rollback_exists'):
         raise SshMigrationError(f'Rollback directory already exists ({plan["rollback_dir"]}); refusing to reuse plan ID')
     if not pre.get('rollback_writable'):
@@ -1445,6 +1914,8 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
         cur_hashes: dict[str, str | None] = {}
         for rel in sp['remote_file_hashes']:
             info = probed_now.get(rel, {})
+            if info.get('is_symlink'):
+                raise SshMigrationError(f'Refusing symlink appeared at remote path since plan: {rel}')
             cur_hashes[rel] = info.get('sha256') if info.get('exists') else None
         cur_fp = compute_remote_fingerprint(matched_now, sp['pinned_volumes'], cur_hashes)
         if cur_fp != sp['remote_state_fingerprint']:
@@ -1469,16 +1940,28 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
                     'stack': sname,
                     'remote_root': plan['remote_root'],
                     'remote_stack_dir': sp['remote_stack_dir'],
+                    'compose_home': sp.get('compose_home'),
                     'project_name': sp['project_name'],
                     'compose_files': sp['compose_files'],
                     'original_compose_files': sp['original_compose_files'],
+                    'use_override': sp.get('use_override', True),
                     'override_filename': sp['override_filename'],
                     'override_b64': payload['override_b64'],
                     'staged_files': payload['staged_files'],
                     'archive_legacy_files': [item['remote_path'] for item in sp['legacy_files_to_archive']],
                     'primary_env_file': sp['primary_env_file'],
+                    'originally_running_services': sp.get('originally_running_services', sp['expected_running_services']),
                     'expected_running_services': sp['expected_running_services'],
-                    'docker_sudo': args.docker_sudo,
+                    'expected_stopped_services': sp.get('expected_stopped_services', []),
+                    'oneshot_services': sp.get('oneshot_services', []),
+                    'oneshot_before': sp.get('oneshot_before', {}),
+                    'new_services': sp.get('new_services', []),
+                    'start_waves': sp.get('start_waves', []),
+                    'rollback_start_waves': sp.get('rollback_start_waves', []),
+                    'rollback_pinned_images': sp.get('rollback_pinned_images', {}),
+                    'expected_service_images': sp.get('expected_service_images', {}),
+                    'expected_service_mounts': sp.get('expected_service_mounts', {}),
+                    'docker_sudo': bool(args.docker_sudo or plan.get('docker_sudo')),
                 },
                 secrets=secrets,
             )
@@ -1493,7 +1976,7 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
                         'rollback_dir': plan['rollback_dir'],
                         'stacks': list(reversed(applied_order)),
                         'force_compose_restore': False,
-                        'docker_sudo': args.docker_sudo,
+                        'docker_sudo': bool(args.docker_sudo or plan.get('docker_sudo')),
                     },
                     secrets=secrets,
                 )
@@ -1504,7 +1987,10 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
                 )
             except SshMigrationError as rb_err:
                 print(f'WARNING: Automatic rollback reported errors: {redact(str(rb_err), secrets)}', file=sys.stderr)
-                print(f'Run manual recovery: python3 scripts/ssh-migrate.py rollback --plan {args.plan}', file=sys.stderr)
+                print(
+                    f'Run manual recovery: python3 scripts/ssh-migrate.py rollback --plan {shlex.quote(str(args.plan))}',
+                    file=sys.stderr,
+                )
             raise SshMigrationError(f'Apply failed on stack "{sname}"; automatic rollback executed') from apply_err
 
     print(
@@ -1515,34 +2001,41 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
 
 
 def cmd_rollback(args: argparse.Namespace) -> int:
+    plan = None
     if args.plan:
         if not args.plan.is_file():
             raise SshMigrationError(f'Plan file not found: {args.plan}')
         plan = json.loads(args.plan.read_text(encoding='utf-8'))
         ssh_target = args.ssh_target or plan['ssh_target']
         rollback_dir = args.rollback_dir or plan['rollback_dir']
+        ensure_remote_rollback_disjoint(rollback_dir, plan['remote_root'])
     else:
         if not args.ssh_target or not args.rollback_dir:
             raise SshMigrationError('Specify --plan <plan.json> or both --ssh-target and --rollback-dir')
         ssh_target = args.ssh_target
-        rollback_dir = args.rollback_dir
+        rollback_dir = validate_remote_path(args.rollback_dir, 'Rollback directory')
 
     ssh = SshClient(ssh_target, args.ssh_bin, args.ssh_config, args.ssh_identity, args.ssh_port, args.connect_timeout)
     resp = ssh.call({
         'action': 'rollback',
         'rollback_dir': rollback_dir,
         'stacks': args.stack or None,
-        'force_compose_restore': True,
-        'docker_sudo': args.docker_sudo,
+        'force_compose_restore': False,
+        'docker_sudo': bool(args.docker_sudo or (plan.get('docker_sudo') if plan else False)),
     })
     for sname, res in resp.get('results', {}).items():
         if res.get('skipped'):
             print(f'Rollback {sname}: skipped ({res.get("reason")})')
         else:
+            extra = (
+                f', removed_new_services={len(res.get("removed_new_services", []))}'
+                if res.get('removed_new_services')
+                else ''
+            )
             print(
                 f'Rollback {sname}: restored={len(res.get("restored_files", []))} file(s), '
                 f'removed={len(res.get("removed_files", []))} file(s), '
-                f'compose_restored={res.get("compose_restored")}'
+                f'compose_restored={res.get("compose_restored")}{extra}'
             )
     print(
         'Rollback finished. NOTE: File/Compose rollback does not undo database writes; '
@@ -1569,7 +2062,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument('--host', required=True)
     p_audit.add_argument('--source-root', required=True, help='Existing deployment directory on remote host')
     p_audit.add_argument('--output', type=Path, required=True, help='Private audit JSON path outside the repo')
-    p_audit.add_argument('--docker-sudo', action='store_true', help='Prefix remote docker invocations with sudo -n')
+    p_audit.add_argument('--docker-sudo', action='store_true', help='Run remote docker/compose invocations via passwordless sudo -n')
     add_ssh_args(p_audit)
 
     p_cap = sub.add_parser('capture-host', help='Fetch allowlisted host/WireGuard/DNS/firewall config over SSH and encrypt locally with SOPS')
