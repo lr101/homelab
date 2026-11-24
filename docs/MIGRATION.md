@@ -139,7 +139,7 @@ Before modifying a single file or container on the remote host, `apply`:
 1. Verifies `plan_digest` (rejects edited or corrupted plans).
 2. Verifies the backup gate (`--confirm-backup-tested` + `--backup-evidence`).
 3. Verifies controller repo `HEAD`, manifest, staged repo files, and re-decrypted `.enc.json` outputs still match the plan hashes (rejects repo or secret drift).
-4. Runs a read-only remote `preflight` across **all** selected stacks confirming executing `hostname`, Compose **>= 2.30**, zero Docker errors, zero remote state drift, all required local images and named volumes exist, every target output parent directory is writable, and the rollback directory is disjoint from `--source-root` and fresh.
+4. Runs a read-only remote `preflight` across **all** selected stacks confirming executing `hostname`, Compose **>= 2.30**, zero Docker errors, zero remote state drift (including verifying unpinned image tags still resolve to their planned image IDs and rejecting newly unreadable paths or directories at target file paths), all required local images and named volumes exist, every target output parent directory is writable, and the rollback directory is disjoint from `--source-root` and fresh.
 
 Then, for each stack sequentially:
 
@@ -172,7 +172,7 @@ python3 scripts/ssh-migrate.py rollback \
   --stack nextcloud
 ```
 
-`rollback` stops and removes **only** newly created service containers via `docker compose rm -s -f -- <new-services>` (never `-v`, preserving all volumes), restores backed-up files and archived legacy `.env` files with their original permissions, deletes newly materialized `.secrets*` files and `.homelab-adopt.override.yml`, and (only if Compose was actually invoked during apply) runs `docker compose up -d --no-build --pull never --no-deps -- <originally-running-services>` with the restored original Compose files (temporarily pinning original image IDs only if a local tag moved) while keeping originally stopped and one-shot services stopped. All rollback errors are surfaced clearly with restored secret values redacted. **If a service wrote to or migrated its database after cutover, restore from your tested application-data backup rather than relying solely on file rollback.**
+`rollback` stops and removes **only** newly created service containers via `docker compose rm -s -f -- <new-services>` (never `-v`, preserving all volumes), restores backed-up files and archived legacy `.env` files with their original permissions, deletes newly materialized `.secrets*` files and `.homelab-adopt.override.yml`, and (only if Compose was actually invoked during apply) runs `docker compose up -d --no-build --pull never --no-deps -- <originally-running-services>` with the restored original Compose files (loading restored preexisting `.secrets.env` for repeat-adoption rollbacks including under `--docker-sudo`, and temporarily pinning original image IDs whenever a local tag moved or a build-only Compose v1 underscore image differs from Compose v2's default `<project>-<service>` name; the temporary `.homelab-rollback.override.yml` is deleted immediately afterwards and stripped from future plans) while keeping originally stopped and one-shot services stopped. All rollback errors are surfaced clearly with restored secret values redacted. **If a service wrote to or migrated its database after cutover, restore from your tested application-data backup rather than relying solely on file rollback.**
 
 Retain the protected rollback directory for an agreed soak window before removing old copies.
 

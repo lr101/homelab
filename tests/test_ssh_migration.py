@@ -108,7 +108,12 @@ for key in list(env):
     if key.startswith('SOPS_'):
         env.pop(key, None)
 
-proc = subprocess.run(['/bin/sh', '-c', remote_cmd], env=env)
+drop_uid = os.environ.get('FAKE_SSH_DROP_UID')
+run_kwargs = {'env': env}
+if drop_uid and os.geteuid() == 0:
+    run_kwargs['user'] = int(drop_uid)
+    run_kwargs['group'] = int(os.environ.get('FAKE_SSH_DROP_GID', drop_uid))
+proc = subprocess.run(['/bin/sh', '-c', remote_cmd], **run_kwargs)
 sys.exit(proc.returncode)
 '''
 
@@ -486,11 +491,40 @@ if argv[:1] == ['compose']:
         home_dir = os.environ.get('HOME', '/root')
         cfg_files_str = ','.join(str((cwd / f).resolve()) for f in files)
 
+        def split_vol_spec(spec):
+            parts, buf, depth, idx = [], [], 0, 0
+            while idx < len(spec):
+                ch = spec[idx]
+                if ch == '$' and idx + 1 < len(spec):
+                    if spec[idx + 1] == '$':
+                        buf.append('$$')
+                        idx += 2
+                        continue
+                    if spec[idx + 1] == '{':
+                        depth += 1
+                        buf.append('${')
+                        idx += 2
+                        continue
+                if ch == '}' and depth > 0:
+                    depth -= 1
+                    buf.append(ch)
+                    idx += 1
+                    continue
+                if ch == ':' and depth == 0:
+                    parts.append(''.join(buf))
+                    buf = []
+                    idx += 1
+                    continue
+                buf.append(ch)
+                idx += 1
+            parts.append(''.join(buf))
+            return parts
+
         def build_mounts(scfg):
             out = []
             for raw_v in scfg.get('volumes') or []:
                 if isinstance(raw_v, str):
-                    parts = raw_v.split(':')
+                    parts = split_vol_spec(raw_v)
                     if len(parts) < 2:
                         continue
                     rsrc, rdst = interp(parts[0], env_map), interp(parts[1], env_map)
@@ -514,7 +548,15 @@ if argv[:1] == ['compose']:
                 sys.exit(1)
             svc = merged_services[sname]
             cfg_img = interp(str(svc.get('image') or ''), env_map)
-            resolved_id = resolve_image_id(state, cfg_img) or cfg_img
+            if not cfg_img and 'build' in svc:
+                # Compose v2 default image name for build-only service is <project>-<service>
+                cfg_img = f'{project}-{sname}'
+                resolved_id = resolve_image_id(state, cfg_img)
+                if not resolved_id:
+                    print(f'pull access denied for {cfg_img}, repository does not exist', file=sys.stderr)
+                    sys.exit(1)
+            else:
+                resolved_id = resolve_image_id(state, cfg_img) or cfg_img
             new_mounts = build_mounts(svc)
             if sname in by_svc:
                 c = containers[by_svc[sname]]
@@ -2692,6 +2734,835 @@ class SshMigrationTests(SshMigrationTestBase):
         self.assertEqual([c for c in self.read_jsonl(self.docker_log) if c['subcmd'][:1] == ['up']], [])
         secrets_dir.chmod(0o700)
 
+    def test_brace_depth_volume_splitting_and_real_repo_required_interpolation(self):
+        """Finding 1 (BLOCKER): brace-depth-aware ':' splitting for ${VAR:?...} volume specs across real repo stacks."""
+        env_map = {
+            'UPLOAD_LOCATION': '/srv/immich/upload',
+            'DB_DATA_LOCATION': '/srv/immich/postgres',
+            'DEVICE_FOLDER_PATH': '/srv/homelab/medion',
+            'LOCAL_BACKUP_PATH': '/srv/backups',
+            'SHARED_FOLDER_PATH': '/srv/homelab/shared',
+            'IMMICH_UPLOAD_LOCATION': '/srv/immich/upload',
+            'NESTED_FALLBACK': '/srv/nested/src',
+            'TARGET_DIR': '/container/target',
+        }
+
+        # Direct unit checks: colons inside ${VAR:?...}, nested braces, and escaped $$
+        synthetic_svc = {
+            'volumes': [
+                '${UPLOAD_LOCATION:?Set UPLOAD_LOCATION: must be absolute}:/usr/src/app/upload:ro',
+                '${MISSING_OUTER:-${NESTED_FALLBACK:?nested err: detail}}:/nested:ro',
+                './hooks:${TARGET_DIR:?Set TARGET_DIR}:ro',
+                '$${LITERAL_NOT_INTERP}:/lit',
+            ],
+        }
+        parsed = ssh_migrate.parse_compose_mounts(synthetic_svc, set(), '/srv/stack', '/home/op', env_map)
+        by_dst = {m['destination']: m for m in parsed}
+        self.assertEqual(by_dst['/usr/src/app/upload']['source'], '/srv/immich/upload')
+        self.assertEqual(by_dst['/nested']['source'], '/srv/nested/src')
+        self.assertEqual(by_dst['/container/target']['source'], '/srv/stack/hooks')
+        self.assertEqual(by_dst['/lit']['raw_source'], '$${LITERAL_NOT_INTERP}')
+
+        # Verify collect_staged_repo_files preserves :ro detection when ':' appears inside ${VAR:?...}
+        ro_repo = self.repo / 'medion/rotest'
+        (ro_repo / 'hooks').mkdir(parents=True)
+        (ro_repo / 'hooks/run.sh').write_text('#!/bin/sh\necho ok\n', encoding='utf-8')
+        (ro_repo / 'docker-compose.yml').write_text(yaml.safe_dump({
+            'services': {
+                'svc': {
+                    'image': 'alpine:3',
+                    'volumes': [
+                        './hooks:${TARGET_DIR:?Set TARGET_DIR: path}:ro',
+                        '${IMMICH_UPLOAD_LOCATION:?Set path}:/ext:ro',
+                    ],
+                },
+            },
+        }, sort_keys=False), encoding='utf-8')
+        staged = ssh_migrate.collect_staged_repo_files(
+            self.repo,
+            {'directory': 'medion/rotest', 'compose': ['docker-compose.yml']},
+            [],
+            set(),
+        )
+        self.assertIn('medion/rotest/hooks/run.sh', staged)
+
+        # Test REAL repo medion/immich-app and shared/backup (+ compose.medion.yml) across all hosts
+        real_manifest, _ = ssh_migrate.load_manifest(REPO_ROOT)
+
+        immich_entry = real_manifest['medion']['immich-app']
+        immich_svcs, immich_vols, _ = ssh_migrate.load_merged_compose(REPO_ROOT, immich_entry)
+        immich_server_mounts = ssh_migrate.parse_compose_mounts(
+            immich_svcs['immich-server'], set(immich_vols.keys()), '/opt/homelab/medion/immich-app', '/home/op', env_map
+        )
+        immich_db_mounts = ssh_migrate.parse_compose_mounts(
+            immich_svcs['database'], set(immich_vols.keys()), '/opt/homelab/medion/immich-app', '/home/op', env_map
+        )
+        srv_by_dst = {m['destination']: m for m in immich_server_mounts}
+        db_by_dst = {m['destination']: m for m in immich_db_mounts}
+        self.assertEqual(srv_by_dst['/usr/src/app/upload']['source'], '/srv/immich/upload')
+        self.assertEqual(db_by_dst['/var/lib/postgresql/data']['source'], '/srv/immich/postgres')
+
+        for host_name in ('medion', 'thinkpad', 'ionos', 'dell'):
+            if 'shared-backup' not in real_manifest.get(host_name, {}):
+                continue
+            sb_entry = real_manifest[host_name]['shared-backup']
+            sb_svcs, sb_vols, _ = ssh_migrate.load_merged_compose(REPO_ROOT, sb_entry)
+            sb_mounts = ssh_migrate.parse_compose_mounts(
+                sb_svcs['autorestic'], set(sb_vols.keys()), '/opt/homelab/shared/backup', '/home/op', env_map
+            )
+            sb_by_dst = {m['destination']: m for m in sb_mounts}
+            self.assertEqual(sb_by_dst['/data']['source'], '/srv/homelab/medion')
+            self.assertEqual(sb_by_dst['/backup']['source'], '/srv/backups')
+            self.assertEqual(sb_by_dst['/shared']['source'], '/srv/homelab/shared')
+            self.assertEqual(sb_by_dst['/root/.ssh']['source'], '/home/op/.ssh')
+            if host_name == 'medion':
+                self.assertEqual(sb_by_dst['/external/immich-upload']['source'], '/srv/immich/upload')
+            else:
+                self.assertNotIn('/external/immich-upload', sb_by_dst)
+            sb_staged = ssh_migrate.collect_staged_repo_files(REPO_ROOT, sb_entry, [], set())
+            self.assertTrue(any(p.startswith('shared/backup/hooks/') for p in sb_staged), sb_staged)
+            self.assertFalse(any(p.startswith('shared/backup/logs') for p in sb_staged), sb_staged)
+
+        # End-to-end plan + apply with required :? volume interpolations (real shared/backup + medion override syntax)
+        (self.repo / 'shared/backup/hooks').mkdir(parents=True)
+        (self.repo / 'shared/backup/hooks/backup.sh').write_text('#!/bin/sh\necho backup\n', encoding='utf-8')
+        (self.repo / 'shared/backup/docker-compose.yml').write_text(
+            (REPO_ROOT / 'shared/backup/docker-compose.yml').read_text(encoding='utf-8'),
+            encoding='utf-8',
+        )
+        (self.repo / 'shared/backup/compose.medion.yml').write_text(
+            (REPO_ROOT / 'shared/backup/compose.medion.yml').read_text(encoding='utf-8'),
+            encoding='utf-8',
+        )
+        (self.repo / 'medion/.autorestic.yml').write_text('version: 2\n', encoding='utf-8')
+        self.manifest['medion']['shared-backup'] = {
+            'directory': 'shared/backup',
+            'env_file': 'shared/backup/.secrets.env',
+            'required': ['DEVICE_FOLDER_PATH', 'LOCAL_BACKUP_PATH', 'SHARED_FOLDER_PATH', 'IMMICH_UPLOAD_LOCATION'],
+            'compose': ['docker-compose.yml', 'compose.medion.yml'],
+            'dependencies': ['backup-credentials'],
+            'encrypted_file': 'secrets/medion/shared-backup.enc.json',
+            'migration': {'env_files': ['shared/backup/.env'], 'file_values': {}},
+        }
+        self.manifest['medion']['backup-credentials'] = {
+            'directory': 'medion',
+            'required': ['AUTORESTIC_ENV'],
+            'files': {'AUTORESTIC_ENV': 'medion/.autorestic.env'},
+            'encrypted_file': 'secrets/medion/backup-credentials.enc.json',
+            'migration': {'env_files': [], 'file_values': {'AUTORESTIC_ENV': 'medion/.autorestic.env'}},
+        }
+        (self.repo / 'shared/secrets/deployments.json').write_text(
+            json.dumps(self.manifest, indent=2), encoding='utf-8'
+        )
+        dev_dir = self.base / 'dev_data'
+        bak_dir = self.base / 'bak_data'
+        shr_dir = self.base / 'shr_data'
+        for d in (dev_dir, bak_dir, shr_dir, self.remote_home / '.ssh'):
+            d.mkdir(parents=True, exist_ok=True)
+        sb_remote = self.remote_root / 'shared/backup'
+        (sb_remote / 'logs').mkdir(parents=True)
+        (sb_remote / 'hooks').mkdir(parents=True)
+        (sb_remote / 'rclone.conf').write_text('[remote]\ntype = sftp\n', encoding='utf-8')
+        (sb_remote / 'docker-compose.yml').write_text(
+            (REPO_ROOT / 'shared/backup/docker-compose.yml').read_text(encoding='utf-8'), encoding='utf-8'
+        )
+        (sb_remote / 'compose.medion.yml').write_text(
+            (REPO_ROOT / 'shared/backup/compose.medion.yml').read_text(encoding='utf-8'), encoding='utf-8'
+        )
+        (sb_remote / '.env').write_text(
+            f'DEVICE_FOLDER_PATH={dev_dir}\nLOCAL_BACKUP_PATH={bak_dir}\n'
+            f'SHARED_FOLDER_PATH={shr_dir}\nIMMICH_UPLOAD_LOCATION={self.uploads_dir}\n',
+            encoding='utf-8',
+        )
+        (self.remote_root / 'medion/.autorestic.env').write_text('RESTIC_PASSWORD=secret\n', encoding='utf-8')
+        fake_sock = self.base / 'docker.sock'
+        fake_sock.write_text('', encoding='utf-8')
+        # Point /var/run/docker.sock check to existing path via test-local compose copy only if needed;
+        # use real compose text except replace /var/run/docker.sock if absent on this test runner
+        if not Path('/var/run/docker.sock').exists():
+            patched_sb = (REPO_ROOT / 'shared/backup/docker-compose.yml').read_text(encoding='utf-8').replace(
+                '/var/run/docker.sock:/var/run/docker.sock', f'{fake_sock}:/var/run/docker.sock'
+            )
+            (self.repo / 'shared/backup/docker-compose.yml').write_text(patched_sb, encoding='utf-8')
+            (sb_remote / 'docker-compose.yml').write_text(patched_sb, encoding='utf-8')
+            sock_src = str(fake_sock.resolve())
+        else:
+            sock_src = '/var/run/docker.sock'
+
+        self.docker_state['containers']['cid-sb'] = {
+            'name': '/autorestic',
+            'image': 'sha256:777777777777',
+            'configured_image': 'ghcr.io/lr101/autorestic:latest',
+            'project': 'backup',
+            'service': 'autorestic',
+            'working_dir': str(sb_remote.resolve()),
+            'config_files': f'{(sb_remote / "docker-compose.yml").resolve()},{(sb_remote / "compose.medion.yml").resolve()}',
+            'mounts': [
+                {'Type': 'bind', 'Source': str(dev_dir.resolve()), 'Destination': '/data'},
+                {'Type': 'bind', 'Source': str(bak_dir.resolve()), 'Destination': '/backup'},
+                {'Type': 'bind', 'Source': str(shr_dir.resolve()), 'Destination': '/shared'},
+                {'Type': 'bind', 'Source': str((sb_remote / 'logs').resolve()), 'Destination': '/var/log/autorestic'},
+                {'Type': 'bind', 'Source': str((sb_remote / 'hooks').resolve()), 'Destination': '/hooks'},
+                {'Type': 'bind', 'Source': sock_src, 'Destination': '/var/run/docker.sock'},
+                {'Type': 'bind', 'Source': str((sb_remote / 'rclone.conf').resolve()), 'Destination': '/root/.rclone.conf'},
+                {'Type': 'bind', 'Source': str((self.remote_home / '.ssh').resolve()), 'Destination': '/root/.ssh'},
+                {'Type': 'bind', 'Source': str(self.uploads_dir.resolve()), 'Destination': '/external/immich-upload'},
+            ],
+            'running': True,
+        }
+        self.docker_state['images']['sha256:777777777777'] = {
+            'repo_digests': ['ghcr.io/lr101/autorestic@sha256:7777'],
+            'tags': ['ghcr.io/lr101/autorestic:latest'],
+        }
+        self._save_docker_state()
+
+        self.assertEqual(
+            self.run_cli(
+                'import-secrets', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'shared-backup', '--apply',
+            ).returncode,
+            0,
+        )
+        sb_plan = self.outside / 'sb-required-interp-plan.json'
+        plan_res = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'shared-backup',
+            '--plan', str(sb_plan),
+        )
+        self.assertEqual(plan_res.returncode, 0, plan_res.stderr)
+        apply_res = self.run_cli(
+            'apply', '--plan', str(sb_plan),
+            '--confirm-backup-tested', '--backup-evidence', 'sb-interp-snap',
+        )
+        self.assertEqual(apply_res.returncode, 0, apply_res.stderr)
+
+    def test_rollback_override_stripping_and_compose_v1_build_only_rollback_pin(self):
+        """Finding 2 (HIGH): Compose v1 underscore build-only image pins on rollback, and temp rollback override is stripped on subsequent plan."""
+        b_repo = self.repo / 'medion/v1build'
+        b_repo.mkdir(parents=True)
+        compose_doc = {
+            'services': {
+                'web': {
+                    'build': '.',
+                    'restart': 'unless-stopped',
+                },
+            },
+        }
+        (b_repo / 'docker-compose.yml').write_text(yaml.safe_dump(compose_doc, sort_keys=False), encoding='utf-8')
+        b_remote = self.remote_root / 'medion/v1build'
+        b_remote.mkdir(parents=True)
+        (b_remote / 'docker-compose.yml').write_text(yaml.safe_dump(compose_doc, sort_keys=False), encoding='utf-8')
+
+        # Compose v1 built image tag uses underscore (v1proj_web) and resolves to sha256:v1build,
+        # while Compose v2 default image name (v1proj-web) does NOT exist!
+        self.docker_state['containers']['cid-v1'] = {
+            'name': '/v1proj_web_1',
+            'image': 'sha256:v1build000001',
+            'configured_image': 'v1proj_web',
+            'project': 'v1proj',
+            'service': 'web',
+            'working_dir': str(b_remote.resolve()),
+            'config_files': str((b_remote / 'docker-compose.yml').resolve()),
+            'mounts': [],
+            'running': True,
+        }
+        self.docker_state['images']['sha256:v1build000001'] = {
+            'repo_digests': [],
+            'tags': ['v1proj_web', 'v1proj_web:latest'],
+        }
+        self._save_docker_state()
+
+        plan1_path = self.outside / 'v1build-plan1.json'
+        p1 = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'v1build',
+            '--plan', str(plan1_path),
+        )
+        self.assertEqual(p1.returncode, 0, p1.stderr)
+        a1 = self.run_cli(
+            'apply', '--plan', str(plan1_path),
+            '--confirm-backup-tested', '--backup-evidence', 'v1build-snap',
+        )
+        self.assertEqual(a1.returncode, 0, a1.stderr)
+
+        # Rollback MUST pin sha256:v1build000001 via .homelab-rollback.override.yml so Compose v2 does not fail looking for v1proj-web
+        rb1 = self.run_cli('rollback', '--plan', str(plan1_path))
+        self.assertEqual(rb1.returncode, 0, rb1.stderr)
+        self.assertFalse((b_remote / '.homelab-rollback.override.yml').exists())
+        state_after_rb = json.loads(self.docker_state_path.read_text(encoding='utf-8'))
+        c_after_rb = state_after_rb['containers']['cid-v1']
+        self.assertEqual(c_after_rb['image'], 'sha256:v1build000001')
+        # Container config_files label now has the deleted .homelab-rollback.override.yml stamped by Compose!
+        self.assertIn('.homelab-rollback.override.yml', c_after_rb['config_files'])
+
+        # Subsequent plan MUST accept the stamped .homelab-rollback.override.yml, strip it, and NEVER propagate it!
+        plan2_path = self.outside / 'v1build-plan2.json'
+        p2 = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'v1build',
+            '--plan', str(plan2_path),
+        )
+        self.assertEqual(p2.returncode, 0, p2.stderr)
+        plan2 = json.loads(plan2_path.read_text(encoding='utf-8'))
+        orig_cfs = plan2['stacks']['v1build']['original_compose_files']
+        self.assertFalse(any('.homelab-rollback.override.yml' in cf for cf in orig_cfs), orig_cfs)
+
+        # Subsequent apply + rollback MUST succeed without referencing the deleted rollback override
+        a2 = self.run_cli(
+            'apply', '--plan', str(plan2_path),
+            '--confirm-backup-tested', '--backup-evidence', 'v1build-snap-2',
+        )
+        self.assertEqual(a2.returncode, 0, a2.stderr)
+        rb2 = self.run_cli('rollback', '--plan', str(plan2_path))
+        self.assertEqual(rb2.returncode, 0, rb2.stderr)
+
+        # Real extra local overrides MUST still be rejected
+        state_extra = json.loads(self.docker_state_path.read_text(encoding='utf-8'))
+        state_extra['containers']['cid-v1']['config_files'] = (
+            f'{(b_remote / "docker-compose.yml").resolve()},{(b_remote / "docker-compose.local.yml").resolve()}'
+        )
+        self.docker_state_path.write_text(json.dumps(state_extra, indent=2), encoding='utf-8')
+        p3 = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'v1build',
+            '--plan', str(self.outside / 'v1build-plan3.json'),
+        )
+        self.assertNotEqual(p3.returncode, 0)
+        self.assertIn('extra local Compose file', p3.stderr)
+
+    def test_unreadable_0700_dirs_lstat_permission_denied_and_exact_audited_bind_source(self):
+        """Finding 3 (HIGH): explicit lstat distinguishes absence vs PermissionError; unreadable 0700 dirs do not crash probe_paths/read_files; exact audited bind source allowed safely."""
+        # Create a directory that triggers REAL kernel PermissionError (EACCES) on traversal.
+        # If running as root, make it 0700 owned by root and drop uid to nobody (65534);
+        # if non-root, chmod 0000 causes identical kernel EACCES on lstat/is_symlink.
+        locked_root = self.base / 'real_locked_root'
+        locked_ssh = locked_root / '.ssh'
+        locked_ssh.mkdir(parents=True)
+        (locked_ssh / 'id_ed25519').write_text('dummy-key\n', encoding='utf-8')
+
+        locked_in_src = self.remote_root / 'medion/webapp/locked_root_dir'
+        locked_in_src.mkdir(parents=True)
+        (locked_in_src / 'secret.env').write_text('K=V\n', encoding='utf-8')
+        readable_in_src = self.remote_root / 'medion/webapp/readable.txt'
+        readable_in_src.write_text('ok\n', encoding='utf-8')
+
+        is_root = os.geteuid() == 0
+        if is_root:
+            locked_root.chmod(0o700)
+            locked_in_src.chmod(0o700)
+            # Ensure parent dirs are traversable by nobody
+            for anc in (self.base, self.remote_root, self.remote_root / 'medion', self.remote_root / 'medion/webapp'):
+                anc.chmod(0o755)
+            drop_env = {'FAKE_SSH_DROP_UID': '65534', 'FAKE_SSH_DROP_GID': '65534'}
+        else:
+            locked_root.chmod(0o000)
+            locked_in_src.chmod(0o000)
+            self.addCleanup(lambda: locked_root.exists() and locked_root.chmod(0o700))
+            self.addCleanup(lambda: locked_in_src.exists() and locked_in_src.chmod(0o700))
+            drop_env = {}
+
+        def run_agent_direct(req_payload):
+            kwargs = {'input': json.dumps(req_payload), 'capture_output': True, 'text': True, 'check': False}
+            if is_root:
+                kwargs['user'] = 65534
+                kwargs['group'] = 65534
+            proc = subprocess.run([sys.executable, str(AGENT_SCRIPT)], **kwargs)
+            self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+            return json.loads(proc.stdout)
+
+        # Sanity check: prove kernel genuinely raises PermissionError on lstat(locked_ssh)
+        sanity_kwargs = {'capture_output': True, 'text': True, 'check': False}
+        if is_root:
+            sanity_kwargs['user'] = 65534
+            sanity_kwargs['group'] = 65534
+        sanity = subprocess.run(
+            [sys.executable, '-c', f'import os; os.lstat({str(locked_ssh)!r})'],
+            **sanity_kwargs,
+        )
+        self.assertNotEqual(sanity.returncode, 0)
+        self.assertIn('PermissionError', sanity.stderr)
+
+        # 1. check_abs_paths & probe_paths must NOT swallow PermissionError or crash on is_symlink()
+        absent_path = str(self.base / 'definitely_absent_path')
+        inspect_resp = run_agent_direct({
+            'action': 'inspect_paths',
+            'source_root': str(self.remote_root),
+            'probe_paths': ['medion/webapp/locked_root_dir/secret.env', 'medion/webapp/readable.txt', 'medion/webapp/missing.txt'],
+            'check_paths': [str(locked_ssh), absent_path],
+            'inspect_images': [],
+            'docker_sudo': False,
+        })
+        self.assertTrue(inspect_resp['ok'], inspect_resp)
+        chk_locked = inspect_resp['checked_paths'][str(locked_ssh)]
+        self.assertTrue(chk_locked.get('permission_denied'), chk_locked)
+        self.assertIsNot(chk_locked.get('exists'), False)
+        chk_absent = inspect_resp['checked_paths'][absent_path]
+        self.assertFalse(chk_absent.get('exists'))
+        self.assertFalse(chk_absent.get('permission_denied', False))
+
+        probed_locked = inspect_resp['probed_files']['medion/webapp/locked_root_dir/secret.env']
+        self.assertTrue(probed_locked.get('permission_denied'), probed_locked)
+        probed_ok = inspect_resp['probed_files']['medion/webapp/readable.txt']
+        self.assertTrue(probed_ok.get('exists'))
+        self.assertTrue(probed_ok.get('readable'))
+        probed_missing = inspect_resp['probed_files']['medion/webapp/missing.txt']
+        self.assertFalse(probed_missing.get('exists'))
+        self.assertFalse(probed_missing.get('permission_denied', False))
+
+        # 2. handle_read_files must NOT crash on unreadable 0700 dir; returns per-entry permission_denied
+        read_resp = run_agent_direct({
+            'action': 'read_files',
+            'source_root': str(self.remote_root),
+            'paths': ['medion/webapp/locked_root_dir/secret.env', 'medion/webapp/readable.txt', 'medion/webapp/missing.txt'],
+        })
+        self.assertTrue(read_resp['ok'], read_resp)
+        self.assertEqual(read_resp['files']['medion/webapp/locked_root_dir/secret.env']['status'], 'permission_denied')
+        self.assertEqual(read_resp['files']['medion/webapp/readable.txt']['status'], 'found')
+        self.assertEqual(read_resp['files']['medion/webapp/missing.txt']['status'], 'missing')
+
+        # 3. End-to-end plan with --docker-sudo and unreadable root home:
+        #    a) exact audited bind source (~/.ssh -> locked_root/.ssh) MUST succeed
+        (self.repo / 'medion/webapp/docker-compose.yml').write_text(yaml.safe_dump({
+            'services': {
+                'db': {
+                    'image': 'mariadb:11.8',
+                    'environment': {'MARIADB_PASSWORD_FILE': '/run/secrets/db_password'},
+                    'volumes': ['database:/var/lib/mysql'],
+                    'secrets': ['db_password'],
+                },
+                'web': {
+                    'image': 'example/webapp:1.2',
+                    'depends_on': ['db'],
+                    'env_file': [{'path': '.secrets.env', 'format': 'raw'}],
+                    'volumes': [
+                        './config/app.conf:/etc/app/app.conf:ro',
+                        '${UPLOAD_LOCATION}:/uploads',
+                        '~/.ssh:/root/.ssh:ro',
+                    ],
+                },
+            },
+            'volumes': {'database': None},
+            'secrets': {'db_password': {'file': './.secrets/db_password'}},
+        }, sort_keys=False), encoding='utf-8')
+        self.docker_state['containers']['cid-web']['mounts'].append(
+            {'Type': 'bind', 'Source': str(locked_ssh), 'Destination': '/root/.ssh'}
+        )
+        self._save_docker_state()
+
+        self.assertEqual(
+            self.run_cli(
+                'import-secrets', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'webapp', '--apply',
+            ).returncode,
+            0,
+        )
+        plan_ok = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'webapp',
+            '--docker-sudo', '--plan', str(self.outside / 'locked-root-ok-plan.json'),
+            extra_env={**drop_env, 'FAKE_SUDO_HOME': str(locked_root)},
+        )
+        self.assertEqual(plan_ok.returncode, 0, plan_ok.stderr)
+
+        #    b) non-audited bind source inside the same unreadable root home MUST fail closed with Permission denied
+        (self.repo / 'medion/webapp/docker-compose.yml').write_text(yaml.safe_dump({
+            'services': {
+                'db': {
+                    'image': 'mariadb:11.8',
+                    'environment': {'MARIADB_PASSWORD_FILE': '/run/secrets/db_password'},
+                    'volumes': ['database:/var/lib/mysql'],
+                    'secrets': ['db_password'],
+                },
+                'web': {
+                    'image': 'example/webapp:1.2',
+                    'depends_on': ['db'],
+                    'env_file': [{'path': '.secrets.env', 'format': 'raw'}],
+                    'volumes': [
+                        './config/app.conf:/etc/app/app.conf:ro',
+                        '${UPLOAD_LOCATION}:/uploads',
+                        '~/.ssh:/root/.ssh:ro',
+                        '~/.other-unverified:/root/.other:ro',
+                    ],
+                },
+            },
+            'volumes': {'database': None},
+            'secrets': {'db_password': {'file': './.secrets/db_password'}},
+        }, sort_keys=False), encoding='utf-8')
+        plan_denied = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'webapp',
+            '--docker-sudo', '--plan', str(self.outside / 'locked-root-denied-plan.json'),
+            extra_env={**drop_env, 'FAKE_SUDO_HOME': str(locked_root)},
+        )
+        self.assertNotEqual(plan_denied.returncode, 0)
+        self.assertIn('permission denied', plan_denied.stderr.lower())
+
+    def test_remove_new_service_containers_retains_fallback_audit_errors(self):
+        """Finding 4 (HIGH): _remove_new_service_containers must NOT clear errors when fallback run_docker_audit fails with empty containers."""
+        state = {
+            'project_name': 'testproj',
+            'remote_stack_dir': str(self.remote_root / 'medion/webapp'),
+            'applied_compose_files': ['docker-compose.yml'],
+            'new_services': ['socket-proxy'],
+            'compose_home': str(self.remote_home),
+        }
+        old_env = dict(os.environ)
+        os.environ['PATH'] = f'{self.remote_bin}:{os.environ.get("PATH", "")}'
+        os.environ['FAKE_DOCKER_STATE'] = str(self.docker_state_path)
+        os.environ['FAKE_DOCKER_LOG'] = str(self.docker_log)
+        try:
+            # Make both compose rm AND fallback docker ps -aq fail!
+            self.docker_state['fail_rules']['testproj:rm'] = 'compose rm failed'
+            self.docker_state['ps_fail'] = 'Cannot connect to Docker daemon'
+            self._save_docker_state()
+
+            removed, errs = ssh_remote_agent._remove_new_service_containers(state, docker_sudo=False, secrets=set())
+            self.assertEqual(removed, [])
+            self.assertTrue(errs, 'Expected inventory failure errors to be retained, got empty list!')
+            joined = ' '.join(errs).lower()
+            self.assertIn('inventory', joined)
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+            self.docker_state.pop('ps_fail', None)
+            self.docker_state['fail_rules'].pop('testproj:rm', None)
+            self._save_docker_state()
+
+    def test_repeat_adopt_rollback_loads_restored_preexisting_primary_env_file_incl_sudo(self):
+        """Finding 5 (HIGH): rollback of repeat adoption loads restored preexisting .secrets.env (required + optional vars) incl --docker-sudo."""
+        (self.repo / 'medion/webapp/docker-compose.yml').write_text(yaml.safe_dump({
+            'services': {
+                'db': {
+                    'image': 'mariadb:11.8',
+                    'environment': {'MARIADB_PASSWORD_FILE': '/run/secrets/db_password'},
+                    'volumes': ['database:/var/lib/mysql'],
+                    'secrets': ['db_password'],
+                },
+                'web': {
+                    'image': 'example/webapp:1.2',
+                    'depends_on': ['db'],
+                    'env_file': [{'path': '.secrets.env', 'format': 'raw'}],
+                    'environment': {
+                        'REQ_TOKEN': '${APP_TOKEN:?APP_TOKEN is required}',
+                        'OPT_TOKEN': '${OPT_SECRET:-}',
+                    },
+                    'volumes': [
+                        './config/app.conf:/etc/app/app.conf:ro',
+                        '${UPLOAD_LOCATION}:/uploads',
+                    ],
+                },
+            },
+            'volumes': {'database': None},
+            'secrets': {'db_password': {'file': './.secrets/db_password'}},
+        }, sort_keys=False), encoding='utf-8')
+        self.manifest['medion']['webapp']['optional'] = ['OPT_SECRET']
+        (self.repo / 'shared/secrets/deployments.json').write_text(
+            json.dumps(self.manifest, indent=2), encoding='utf-8'
+        )
+        (self.remote_root / 'medion/webapp/.env').write_text(
+            "DB_PASSWORD='db$pass#literal'\n"
+            "APP_TOKEN='orig-required-tok'\n"
+            "OPT_SECRET='orig-optional-val'\n"
+            f'UPLOAD_LOCATION={self.uploads_dir}\n',
+            encoding='utf-8',
+        )
+
+        # First adoption: archives legacy .env, creates .secrets.env (mode 0600)
+        self.assertEqual(
+            self.run_cli(
+                'import-secrets', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'webapp', '--apply',
+            ).returncode,
+            0,
+        )
+        plan1 = self.outside / 'repeat-plan1.json'
+        self.assertEqual(
+            self.run_cli(
+                'plan', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'webapp',
+                '--docker-sudo', '--plan', str(plan1),
+            ).returncode,
+            0,
+        )
+        a1 = self.run_cli(
+            'apply', '--plan', str(plan1),
+            '--confirm-backup-tested', '--backup-evidence', 'repeat-snap-1',
+        )
+        self.assertEqual(a1.returncode, 0, a1.stderr)
+        webapp_remote = self.remote_root / 'medion/webapp'
+        self.assertFalse((webapp_remote / '.env').exists())
+        self.assertTrue((webapp_remote / '.secrets.env').is_file())
+
+        # Second (repeat) adoption: update staged config and secrets, plan + apply under --docker-sudo, then rollback!
+        (self.repo / 'medion/webapp/config/app.conf').write_text('mode=v2\n', encoding='utf-8')
+        enc_path = self.repo / 'secrets/medion/webapp.enc.json'
+        enc_doc = json.loads(enc_path.read_text(encoding='utf-8'))
+        # Fake sops uses ENC[FAKE:<json>]
+        enc_doc['APP_TOKEN'] = 'ENC[FAKE:' + json.dumps('new-required-tok') + ']'
+        enc_doc['OPT_SECRET'] = 'ENC[FAKE:' + json.dumps('new-optional-val') + ']'
+        enc_path.write_text(json.dumps(enc_doc, indent=2), encoding='utf-8')
+
+        plan2 = self.outside / 'repeat-plan2.json'
+        p2 = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'webapp',
+            '--docker-sudo', '--plan', str(plan2),
+        )
+        self.assertEqual(p2.returncode, 0, p2.stderr)
+        a2 = self.run_cli(
+            'apply', '--plan', str(plan2),
+            '--confirm-backup-tested', '--backup-evidence', 'repeat-snap-2',
+        )
+        self.assertEqual(a2.returncode, 0, a2.stderr)
+
+        # Clear docker & sudo logs before explicit rollback so we inspect ONLY rollback calls
+        self.docker_log.write_text('', encoding='utf-8')
+        self.sudo_log.write_text('', encoding='utf-8')
+
+        rb2 = self.run_cli('rollback', '--plan', str(plan2))
+        self.assertEqual(rb2.returncode, 0, rb2.stderr)
+        # Restored preexisting .secrets.env must have original values and be passed to rollback compose up under sudo!
+        self.assertIn('APP_TOKEN=orig-required-tok\n', (webapp_remote / '.secrets.env').read_text(encoding='utf-8'))
+        rb_up_calls = [c for c in self.read_jsonl(self.docker_log) if c['project'] == 'legacy-webapp-proj' and c['subcmd'][:1] == ['up']]
+        self.assertTrue(rb_up_calls)
+        for c in rb_up_calls:
+            self.assertEqual(c['sudo_active'], '1')
+            self.assertEqual(c['env_snapshot'].get('APP_TOKEN'), 'orig-required-tok')
+            self.assertEqual(c['env_snapshot'].get('OPT_SECRET'), 'orig-optional-val')
+        # Zero secrets leaked in sudo argv
+        for entry in self.read_jsonl(self.sudo_log):
+            joined = ' '.join(entry['argv'])
+            self.assertNotIn('orig-required-tok', joined)
+            self.assertNotIn('orig-optional-val', joined)
+
+    def test_preflight_rejects_unpinned_tag_drift_before_any_mutation(self):
+        """Finding 6 (MEDIUM): unpinned tag moved between plan and apply is rejected in preflight BEFORE any file mutation or compose up."""
+        self.assertEqual(
+            self.run_cli(
+                'import-secrets', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'webapp', '--apply',
+            ).returncode,
+            0,
+        )
+        plan_path = self.outside / 'tag-drift-plan.json'
+        p = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'webapp',
+            '--plan', str(plan_path),
+        )
+        self.assertEqual(p.returncode, 0, p.stderr)
+        plan = json.loads(plan_path.read_text(encoding='utf-8'))
+        # example/webapp:1.2 is unpinned (local tag matched running sha256:111111111111)
+        self.assertEqual(plan['stacks']['webapp']['pinned_images'], {})
+        self.assertEqual(
+            plan['stacks']['webapp'].get('expected_image_refs', {}).get('example/webapp:1.2'),
+            'sha256:111111111111',
+        )
+
+        # Move tag example/webapp:1.2 to a new image BEFORE apply while old image + container remain untouched!
+        self.docker_state['images']['sha256:111111111111']['tags'] = []
+        self.docker_state['images']['sha256:999999999999'] = {
+            'repo_digests': ['example/webapp@sha256:9999'],
+            'tags': ['example/webapp:1.2'],
+        }
+        self._save_docker_state()
+
+        webapp_remote = self.remote_root / 'medion/webapp'
+        compose_before = (webapp_remote / 'docker-compose.yml').read_text(encoding='utf-8')
+        env_before = (webapp_remote / '.env').read_text(encoding='utf-8')
+        self.docker_log.write_text('', encoding='utf-8')
+
+        a = self.run_cli(
+            'apply', '--plan', str(plan_path),
+            '--confirm-backup-tested', '--backup-evidence', 'tag-drift-snap',
+        )
+        self.assertNotEqual(a.returncode, 0)
+        self.assertIn('drift', a.stderr.lower())
+        # Verify ZERO mutations occurred on remote host!
+        self.assertEqual((webapp_remote / 'docker-compose.yml').read_text(encoding='utf-8'), compose_before)
+        self.assertEqual((webapp_remote / '.env').read_text(encoding='utf-8'), env_before)
+        self.assertFalse((webapp_remote / '.secrets.env').exists())
+        self.assertFalse(Path(plan['rollback_dir']).exists())
+        self.assertEqual([c for c in self.read_jsonl(self.docker_log) if c['subcmd'][:1] == ['up']], [])
+
+    def test_run_docker_sock_alias_in_socket_relocation(self):
+        """Finding 7A (LOW): /run/docker.sock alias accepted in reviewed Traefik -> socket-proxy socket relocation."""
+        tr_repo = self.repo / 'medion/traefik'
+        tr_repo.mkdir(parents=True)
+        (tr_repo / 'docker-compose.yml').write_text(yaml.safe_dump({
+            'services': {
+                'socket-proxy': {
+                    'image': 'lscr.io/linuxserver/socket-proxy:latest',
+                    'volumes': ['/var/run/docker.sock:/var/run/docker.sock:ro'],
+                },
+                'traefik': {
+                    'image': 'traefik:v3.3',
+                    'depends_on': ['socket-proxy'],
+                    'volumes': [],
+                },
+            },
+        }, sort_keys=False), encoding='utf-8')
+        tr_remote = self.remote_root / 'medion/traefik'
+        tr_remote.mkdir(parents=True)
+        (tr_remote / 'docker-compose.yml').write_text(yaml.safe_dump({
+            'services': {
+                'traefik': {
+                    'image': 'traefik:v3.3',
+                    'volumes': ['/run/docker.sock:/run/docker.sock:ro'],
+                },
+            },
+        }, sort_keys=False), encoding='utf-8')
+
+        self.docker_state['containers']['cid-tr-sock'] = {
+            'name': '/traefik',
+            'image': 'sha256:aaaa11111111',
+            'configured_image': 'traefik:v3.3',
+            'project': 'traefik',
+            'service': 'traefik',
+            'working_dir': str(tr_remote.resolve()),
+            'config_files': str((tr_remote / 'docker-compose.yml').resolve()),
+            'mounts': [
+                {'Type': 'bind', 'Source': '/run/docker.sock', 'Destination': '/run/docker.sock'},
+            ],
+            'running': True,
+        }
+        self.docker_state['images']['sha256:aaaa11111111'] = {'repo_digests': [], 'tags': ['traefik:v3.3']}
+        self.docker_state['images']['sha256:bbbb22222222'] = {'repo_digests': [], 'tags': ['lscr.io/linuxserver/socket-proxy:latest']}
+        self._save_docker_state()
+
+        orig_call = ssh_migrate.SshClient.call
+        def fake_sock_run(self_ssh, payload, *args, **kwargs):
+            res = orig_call(self_ssh, payload, *args, **kwargs)
+            if isinstance(res, dict) and 'checked_paths' in res:
+                for sp in ('/var/run/docker.sock', '/run/docker.sock'):
+                    if sp in res['checked_paths']:
+                        res['checked_paths'][sp] = {'exists': True, 'realpath': '/run/docker.sock', 'permission_denied': False}
+            return res
+
+        old_env = dict(os.environ)
+        os.environ.update({
+            'PATH': f'{self.controller_bin}:{os.environ.get("PATH", "")}',
+            'FAKE_SSH_LOG': str(self.ssh_log),
+            'FAKE_REMOTE_BIN': str(self.remote_bin),
+            'FAKE_REMOTE_HOME': str(self.remote_home),
+            'FAKE_DOCKER_STATE': str(self.docker_state_path),
+            'FAKE_DOCKER_LOG': str(self.docker_log),
+            'FAKE_SUDO_LOG': str(self.sudo_log),
+        })
+        def run_inproc(cli_args):
+            with unittest.mock.patch.object(ssh_migrate.SshClient, 'call', autospec=True, side_effect=fake_sock_run):
+                with unittest.mock.patch.object(sys, 'argv', ['ssh-migrate.py'] + cli_args):
+                    return ssh_migrate.main()
+        try:
+            rc = run_inproc([
+                '--root', str(self.repo), 'plan', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'traefik',
+                '--allow-new-services', '--plan', str(self.outside / 'tr-run-sock-plan.json'),
+            ])
+            self.assertEqual(rc, 0)
+
+            # Negative check: if socket-proxy does NOT mount docker.sock, /run/docker.sock MUST still be rejected
+            (tr_repo / 'docker-compose.yml').write_text(yaml.safe_dump({
+                'services': {
+                    'socket-proxy': {'image': 'lscr.io/linuxserver/socket-proxy:latest', 'volumes': []},
+                    'traefik': {'image': 'traefik:v3.3', 'depends_on': ['socket-proxy'], 'volumes': []},
+                },
+            }, sort_keys=False), encoding='utf-8')
+            rc_neg = run_inproc([
+                '--root', str(self.repo), 'plan', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'traefik',
+                '--allow-new-services', '--plan', str(self.outside / 'tr-run-sock-neg-plan.json'),
+            ])
+            self.assertNotEqual(rc_neg, 0)
+        finally:
+            os.environ.clear()
+            os.environ.update(old_env)
+
+    def test_harvest_secret_values_json_including_trailing_comma(self):
+        """Finding 7B (LOW): JSON secret harvesting extracts JSON string values including trailing commas and escaped chars."""
+        # 1. Standard JSON (like firebase-token.json / secret.json) where lines end with commas
+        json_payload = (
+            '{\n'
+            '  "private_key": "super-secret-json-key-1",\n'
+            '  "escaped_val": "esc\\"quote\\\\slash",\n'
+            '  "nested": {"api_token": "nested-json-token-2", "list": ["arr-secret-3"]}\n'
+            '}\n'
+        ).encode('utf-8')
+        secrets_set = set()
+        ssh_remote_agent.harvest_secret_values(json_payload, secrets_set)
+        sample_err = 'leak: super-secret-json-key-1 esc"quote\\slash nested-json-token-2 arr-secret-3'
+        redacted = ssh_remote_agent.redact(sample_err, secrets_set)
+        self.assertNotIn('super-secret-json-key-1', redacted)
+        self.assertNotIn('esc"quote\\slash', redacted)
+        self.assertNotIn('nested-json-token-2', redacted)
+        self.assertNotIn('arr-secret-3', redacted)
+
+        # 2. JSON with trailing comma before closing brace (non-strict JSON)
+        trailing_comma_payload = (
+            '{\n'
+            '  "token": "trailing-comma-secret-9",\n'
+            '}\n'
+        ).encode('utf-8')
+        secrets_tc = set()
+        ssh_remote_agent.harvest_secret_values(trailing_comma_payload, secrets_tc)
+        redacted_tc = ssh_remote_agent.redact('err: trailing-comma-secret-9', secrets_tc)
+        self.assertNotIn('trailing-comma-secret-9', redacted_tc)
+
+    def test_preflight_rejects_newly_unreadable_path_or_directory_at_absent_file(self):
+        """Finding 7C (LOW): preflight must reject directory or newly unreadable path at previously absent file instead of treating hash as None."""
+        self.assertEqual(
+            self.run_cli(
+                'import-secrets', '--host', 'medion', '--ssh-target', 'medion',
+                '--source-root', str(self.remote_root), '--stack', 'webapp', '--apply',
+            ).returncode,
+            0,
+        )
+        plan_path = self.outside / 'pf-dir-perm-plan.json'
+        p = self.run_cli(
+            'plan', '--host', 'medion', '--ssh-target', 'medion',
+            '--source-root', str(self.remote_root), '--stack', 'webapp',
+            '--plan', str(plan_path),
+        )
+        self.assertEqual(p.returncode, 0, p.stderr)
+        plan = json.loads(plan_path.read_text(encoding='utf-8'))
+        webapp_remote = self.remote_root / 'medion/webapp'
+        self.assertIsNone(plan['stacks']['webapp']['remote_file_hashes']['medion/webapp/.secrets.env'])
+
+        # Case A: a directory appears where previously absent .secrets.env is expected
+        sec_env_dir = webapp_remote / '.secrets.env'
+        sec_env_dir.mkdir()
+        self.addCleanup(lambda: sec_env_dir.is_dir() and sec_env_dir.rmdir())
+        res_dir = self.run_cli(
+            'apply', '--plan', str(plan_path),
+            '--confirm-backup-tested', '--backup-evidence', 'pf-dir-snap',
+        )
+        self.assertNotEqual(res_dir.returncode, 0)
+        self.assertIn('not a regular file', res_dir.stderr.lower())
+        self.assertFalse(Path(plan['rollback_dir']).exists())
+        sec_env_dir.rmdir()
+
+        # Case B: previously absent .secrets.env becomes a newly unreadable file inside a WRITABLE parent dir
+        sec_env_file = webapp_remote / '.secrets.env'
+        sec_env_file.write_text('UNREADABLE=1\n', encoding='utf-8')
+        if os.geteuid() == 0:
+            sec_env_file.chmod(0o600)
+            for anc in (self.base, self.remote_root, self.remote_root / 'medion', webapp_remote):
+                anc.chmod(0o777)
+            drop_env = {'FAKE_SSH_DROP_UID': '65534', 'FAKE_SSH_DROP_GID': '65534'}
+        else:
+            sec_env_file.chmod(0o000)
+            self.addCleanup(lambda: sec_env_file.exists() and (sec_env_file.chmod(0o600) or sec_env_file.unlink()))
+            drop_env = {}
+
+        res_perm = self.run_cli(
+            'apply', '--plan', str(plan_path),
+            '--confirm-backup-tested', '--backup-evidence', 'pf-perm-snap',
+            extra_env=drop_env,
+        )
+        self.assertNotEqual(res_perm.returncode, 0)
+        self.assertIn('permission denied', res_perm.stderr.lower())
+        self.assertFalse(Path(plan['rollback_dir']).exists())
+
 @unittest.skipUnless(REAL_SOPS and REAL_AGE_KEYGEN, 'real sops and age-keygen binaries not available')
 class RealSopsAgeRoundTripTests(SshMigrationTestBase):
     def test_real_sops_age_encrypt_plan_and_apply_round_trip(self):
@@ -3076,6 +3947,75 @@ class RealComposeCliTests(unittest.TestCase):
             # Zero secret values in sudo argv!
             sudo_text = sudo_log.read_text(encoding='utf-8')
             self.assertNotIn('super-secret-via-stdin', sudo_text)
+
+
+    def test_real_compose_parity_for_immich_and_shared_backup_required_volume_interpolations(self):
+        """Verify parse_compose_mounts matches real Compose v2.40.3 config --format json for medion/immich-app and shared/backup."""
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            env_map = {
+                'UPLOAD_LOCATION': str(base / 'immich_upload'),
+                'DB_DATA_LOCATION': str(base / 'immich_pg'),
+                'DB_USERNAME': 'postgres',
+                'DB_DATABASE_NAME': 'immich',
+                'DEVICE_FOLDER_PATH': str(base / 'medion_dir'),
+                'LOCAL_BACKUP_PATH': str(base / 'local_bak'),
+                'SHARED_FOLDER_PATH': str(base / 'shared_dir'),
+                'IMMICH_UPLOAD_LOCATION': str(base / 'immich_upload'),
+            }
+            fake_home = str(base / 'op_home')
+
+            # 1. medion/immich-app
+            im_dir = base / 'immich-app'
+            shutil.copytree(REPO_ROOT / 'medion/immich-app', im_dir)
+            (im_dir / '.secrets.env').write_text('', encoding='utf-8')
+            (im_dir / '.secrets.kiosk.env').write_text('', encoding='utf-8')
+            (im_dir / '.secrets').mkdir(exist_ok=True)
+            (im_dir / '.secrets/postgres_password').write_text('pw', encoding='utf-8')
+            im_env = dict(os.environ, **env_map, HOME=fake_home)
+            cfg_im = subprocess.run(
+                [REAL_COMPOSE, '-f', 'docker-compose.yml', 'config', '--format', 'json'],
+                cwd=str(im_dir), env=im_env, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(cfg_im.returncode, 0, cfg_im.stderr)
+            im_rendered = json.loads(cfg_im.stdout)
+
+            real_manifest, _ = ssh_migrate.load_manifest(REPO_ROOT)
+            im_svcs, im_vols, _ = ssh_migrate.load_merged_compose(REPO_ROOT, real_manifest['medion']['immich-app'])
+            for svc_name in ('immich-server', 'database'):
+                parsed = ssh_migrate.parse_compose_mounts(
+                    im_svcs[svc_name], set(im_vols.keys()), str(im_dir.resolve()), fake_home, env_map
+                )
+                parsed_binds = {m['destination']: m['source'] for m in parsed if m['type'] == 'bind'}
+                real_binds = {
+                    v['target']: v['source']
+                    for v in im_rendered['services'][svc_name].get('volumes', [])
+                    if v.get('type') == 'bind'
+                }
+                self.assertEqual(parsed_binds, real_binds, f'Mismatch for medion/immich-app/{svc_name}')
+
+            # 2. shared/backup + compose.medion.yml
+            sb_dir = base / 'backup'
+            shutil.copytree(REPO_ROOT / 'shared/backup', sb_dir)
+            (sb_dir / '.secrets.env').write_text('', encoding='utf-8')
+            cfg_sb = subprocess.run(
+                [REAL_COMPOSE, '-f', 'docker-compose.yml', '-f', 'compose.medion.yml', 'config', '--format', 'json'],
+                cwd=str(sb_dir), env=im_env, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(cfg_sb.returncode, 0, cfg_sb.stderr)
+            sb_rendered = json.loads(cfg_sb.stdout)
+
+            sb_svcs, sb_vols, _ = ssh_migrate.load_merged_compose(REPO_ROOT, real_manifest['medion']['shared-backup'])
+            sb_parsed = ssh_migrate.parse_compose_mounts(
+                sb_svcs['autorestic'], set(sb_vols.keys()), str(sb_dir.resolve()), fake_home, env_map
+            )
+            sb_parsed_binds = {m['destination']: m['source'] for m in sb_parsed if m['type'] == 'bind'}
+            sb_real_binds = {
+                v['target']: v['source']
+                for v in sb_rendered['services']['autorestic'].get('volumes', [])
+                if v.get('type') == 'bind'
+            }
+            self.assertEqual(sb_parsed_binds, sb_real_binds)
 
 if __name__ == '__main__':
     unittest.main()

@@ -29,6 +29,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = Path(__file__).resolve().parent
 REMOTE_AGENT_PATH = SCRIPTS_DIR / 'ssh_remote_agent.py'
 OVERRIDE_FILENAME = '.homelab-adopt.override.yml'
+ROLLBACK_OVERRIDE_FILENAME = '.homelab-rollback.override.yml'
+DOCKER_SOCK_PATHS = frozenset({'/var/run/docker.sock', '/run/docker.sock'})
 MIN_COMPOSE_VERSION = (2, 30, 0)
 COMPOSE_VER_RE = re.compile(r'v?(\d+)\.(\d+)(?:\.(\d+))?')
 SSH_TARGET_RE = re.compile(r'[A-Za-z0-9._@:\[\]-]+\Z')
@@ -379,20 +381,132 @@ def render_secret_outputs(entry: dict, values: dict[str, str]) -> dict[str, tupl
     return outputs
 
 
+def split_compose_volume_spec(spec: str) -> list[str]:
+    """Split Docker Compose short volume syntax on ':' outside ${...} interpolation expressions."""
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    i = 0
+    n = len(spec)
+    while i < n:
+        ch = spec[i]
+        if ch == '$' and i + 1 < n:
+            nxt = spec[i + 1]
+            if nxt == '$':
+                buf.append('$$')
+                i += 2
+                continue
+            if nxt == '{':
+                depth += 1
+                buf.append('${')
+                i += 2
+                continue
+        if ch == '}' and depth > 0:
+            depth -= 1
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ':' and depth == 0:
+            parts.append(''.join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    parts.append(''.join(buf))
+    return parts
+
+
 def interpolate_value(expr: str, env_map: dict[str, str]) -> str:
-    def _replace(match: re.Match) -> str:
-        name = match.group(1) or match.group(4)
-        op = match.group(2)
-        default = match.group(3)
-        if name in env_map:
-            val = env_map[name]
-            if op == ':-' and val == '':
-                return default or ''
-            return val
-        if op in (':-', '-'):
-            return default or ''
-        return match.group(0)
-    return VAR_EXPR_RE.sub(_replace, expr)
+    """Interpolate Compose $VAR and balanced ${VAR...} expressions (including nested defaults and :? errors)."""
+    out: list[str] = []
+    i = 0
+    n = len(expr)
+    while i < n:
+        ch = expr[i]
+        if ch != '$' or i + 1 >= n:
+            out.append(ch)
+            i += 1
+            continue
+        nxt = expr[i + 1]
+        if nxt == '$':
+            out.append('$')
+            i += 2
+            continue
+        if nxt == '{':
+            # Find matching '}' respecting nested ${...}
+            depth = 1
+            j = i + 2
+            while j < n and depth > 0:
+                if expr[j] == '$' and j + 1 < n:
+                    if expr[j + 1] == '$':
+                        j += 2
+                        continue
+                    if expr[j + 1] == '{':
+                        depth += 1
+                        j += 2
+                        continue
+                if expr[j] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            if depth != 0:
+                out.append(expr[i:])
+                break
+            raw_token = expr[i:j + 1]
+            inner = expr[i + 2:j]
+            m_name = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)(.*)\Z', inner, re.DOTALL)
+            if not m_name:
+                out.append(raw_token)
+                i = j + 1
+                continue
+            name, rest = m_name.group(1), m_name.group(2)
+            if rest == '':
+                out.append(env_map[name] if name in env_map else raw_token)
+            elif rest.startswith(':-'):
+                if name in env_map and env_map[name] != '':
+                    out.append(env_map[name])
+                else:
+                    out.append(interpolate_value(rest[2:], env_map))
+            elif rest.startswith('-'):
+                if name in env_map:
+                    out.append(env_map[name])
+                else:
+                    out.append(interpolate_value(rest[1:], env_map))
+            elif rest.startswith(':?'):
+                if name in env_map and env_map[name] != '':
+                    out.append(env_map[name])
+                else:
+                    out.append(raw_token)
+            elif rest.startswith('?'):
+                if name in env_map:
+                    out.append(env_map[name])
+                else:
+                    out.append(raw_token)
+            elif rest.startswith(':+'):
+                if name in env_map and env_map[name] != '':
+                    out.append(interpolate_value(rest[2:], env_map))
+                else:
+                    out.append('')
+            elif rest.startswith('+'):
+                if name in env_map:
+                    out.append(interpolate_value(rest[1:], env_map))
+                else:
+                    out.append('')
+            else:
+                out.append(raw_token)
+            i = j + 1
+            continue
+        m_bare = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)', expr[i + 1:])
+        if m_bare:
+            name = m_bare.group(1)
+            out.append(env_map[name] if name in env_map else '$' + name)
+            i += 1 + len(name)
+            continue
+        out.append('$')
+        i += 1
+    return ''.join(out)
 
 
 def normalize_image_ref(ref: str) -> str:
@@ -519,7 +633,7 @@ def collect_staged_repo_files(root: Path, stack_entry: dict, dep_entries: list[d
             src = ''
             is_ro = False
             if isinstance(vol, str):
-                parts = vol.split(':')
+                parts = split_compose_volume_spec(vol)
                 src = parts[0]
                 if len(parts) >= 3:
                     opts = {opt.strip() for opt in parts[2].split(',')}
@@ -565,7 +679,7 @@ def parse_compose_mounts(scfg: dict, declared_volumes: set[str], remote_stack_di
     parsed = []
     for raw in scfg.get('volumes') or []:
         if isinstance(raw, str):
-            parts = raw.split(':')
+            parts = split_compose_volume_spec(raw)
             if len(parts) < 2:
                 continue
             raw_src, raw_dst = parts[0], parts[1]
@@ -1273,12 +1387,16 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             raise SshMigrationError(f'Stack "{name}" has invalid Compose project name "{project_name}"')
 
         # Capture original compose files & fail closed if unknown local override files are active
+        rollback_override_cf = posixpath.normpath(posixpath.join(remote_stack_dir, ROLLBACK_OVERRIDE_FILENAME))
         orig_cf_set: list[str] = []
         for c in matched:
             for item in str(c.get('config_files') or '').split(','):
                 item = item.strip()
                 if item:
                     norm_item = posixpath.normpath(item)
+                    if norm_item == rollback_override_cf:
+                        # Temporary rollback pin override deleted after rollback; allow and never propagate.
+                        continue
                     if norm_item not in orig_cf_set:
                         orig_cf_set.append(norm_item)
         expected_cfs = {posixpath.normpath(posixpath.join(remote_stack_dir, cf)) for cf in entry['compose']}
@@ -1348,6 +1466,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
         # Image identity, conditional pinning, and running/stopped classification
         override_pinned_images: dict[str, str] = {}
         expected_service_images: dict[str, str] = {}
+        expected_image_refs: dict[str, str] = {}
         rollback_pinned_images: dict[str, dict] = {}
         image_drift_pinned: list[str] = []
         stack_warnings: list[str] = []
@@ -1401,6 +1520,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                         'pull it first before running adoption with --pull never'
                     )
                 expected_service_images[sname] = new_img_id
+                expected_image_refs[raw_img] = new_img_id
                 service_records[sname] = {
                     'new_service': True,
                     'oneshot': False,
@@ -1417,16 +1537,18 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             audited_cfg_img = str(audited.get('configured_image') or '')
             expected_service_images[sname] = img_id
             is_running = bool(audited.get('running'))
+            is_build_only = 'build' in scfg and not scfg.get('image')
             if is_running:
                 originally_running.append(sname)
                 rollback_pinned_images[sname] = {
                     'image_id': img_id,
                     'configured_image': audited_cfg_img,
+                    'build_only': is_build_only,
                 }
             else:
                 originally_stopped.append(sname)
 
-            if 'build' in scfg and not scfg.get('image'):
+            if is_build_only:
                 override_pinned_images[sname] = img_id
             else:
                 repo_img = interpolate_value(str(scfg.get('image') or ''), st['primary_env_map'])
@@ -1434,7 +1556,9 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                 if repo_resolved_id == img_id:
                     # Local repo_img tag already resolves to the exact running image ID:
                     # do NOT overwrite image: with sha256:<id> (preserves Watchtower & idempotent re-plan!)
-                    pass
+                    # Record expected_image_refs so apply preflight rejects tag drift BEFORE any mutation.
+                    if repo_img and not repo_img.startswith('sha256:'):
+                        expected_image_refs[repo_img] = img_id
                 else:
                     if normalize_image_ref(repo_img) != normalize_image_ref(audited_cfg_img):
                         if not args.pin_running_images:
@@ -1487,6 +1611,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
         }
         pinned_volumes: dict[str, str] = {}
         ignored_anonymous_volumes: list[dict] = []
+        exact_audited_binds: set[tuple[str, str, str]] = set()
 
         for sname, scfg in services.items():
             proposed = proposed_mounts_by_stack[name][sname]
@@ -1523,14 +1648,17 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                         if pm and pm['type'] == 'bind' and pm['source'] in secret_remote_paths:
                             # Intentional SOPS secret file migration (e.g. legacy token -> .secrets/token)
                             continue
-                        if not pm and asrc == '/var/run/docker.sock' and dst == '/var/run/docker.sock':
+                        if not pm and asrc in DOCKER_SOCK_PATHS and dst in DOCKER_SOCK_PATHS:
                             # Allow Traefik docker.sock -> socket-proxy transition when another service in this stack mounts it
                             other_mounts_sock = any(
                                 other_svc != sname
                                 and any(
                                     om['type'] == 'bind'
-                                    and om['source'] == '/var/run/docker.sock'
-                                    and posixpath.normpath(om['destination']) == '/var/run/docker.sock'
+                                    and (
+                                        om['source'] in DOCKER_SOCK_PATHS
+                                        or posixpath.normpath(checked_paths.get(om['source'], {}).get('realpath', om['source'])) in DOCKER_SOCK_PATHS
+                                    )
+                                    and posixpath.normpath(om['destination']) in DOCKER_SOCK_PATHS
                                     for om in proposed_mounts_by_stack[name].get(other_svc, [])
                                 )
                                 for other_svc in services
@@ -1549,6 +1677,8 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                             raise SshMigrationError(
                                 f'Bind mount drift for {name}/{sname}:{dst}: audited source "{asrc}" vs proposed "{psrc}"'
                             )
+                        if psrc == asrc:
+                            exact_audited_binds.add((sname, dst, psrc))
 
             # Verify no proposed named volume is unpinned (would create a new empty volume!)
             # Skip pruned one-shots that will not be started during adoption
@@ -1569,7 +1699,16 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                     # Also allow parent directory of a staged/secret file (e.g. ./config when ./config/traefik.yaml is staged)
                     if any(sp.startswith(psrc + '/') for sp in staged_remote_paths | secret_remote_paths):
                         continue
-                    if not checked_paths.get(psrc, {}).get('exists'):
+                    chk = checked_paths.get(psrc, {})
+                    if not chk.get('exists'):
+                        if chk.get('permission_denied') and (sname, posixpath.normpath(pm['destination']), psrc) in exact_audited_binds:
+                            # Exact audited bind source already mounted by Docker daemon, though SSH user lacks traversal (e.g. 0700 root dir)
+                            continue
+                        if chk.get('permission_denied'):
+                            raise SshMigrationError(
+                                f'Permission denied checking proposed bind mount source "{psrc}" for {name}/{sname}:{pm["destination"]}; '
+                                'cannot verify existence on remote host'
+                            )
                         raise SshMigrationError(
                             f'Proposed bind mount source "{psrc}" for {name}/{sname}:{pm["destination"]} '
                             'does not exist on remote host; refusing to auto-create an empty directory'
@@ -1627,6 +1766,8 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
                 raise SshMigrationError(f'Refusing symlink at remote {label} path: {rel}')
             if pinfo.get('permission_denied'):
                 raise SshMigrationError(f'Permission denied probing remote {label}: {rel}')
+            if pinfo.get('exists') and not pinfo.get('is_file'):
+                raise SshMigrationError(f'Remote {label} path is not a regular file: {rel}')
             return pinfo
 
         for rel in st['staged_repo_rels']:
@@ -1709,6 +1850,7 @@ def cmd_plan(root: Path, manifest: dict, manifest_sha: str, args: argparse.Names
             'rollback_start_waves': rollback_start_waves,
             'pinned_images': override_pinned_images,
             'expected_service_images': expected_service_images,
+            'expected_image_refs': expected_image_refs,
             'rollback_pinned_images': rollback_pinned_images,
             'expected_service_mounts': expected_service_mounts,
             'image_drift_pinned': image_drift_pinned,
@@ -1804,6 +1946,7 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
     stack_payloads: dict[str, dict] = {}
     all_probe_rels: set[str] = set()
     all_check_images: set[str] = set()
+    all_inspect_image_refs: set[str] = set()
     all_check_volumes: set[str] = set()
     all_writable_dirs: set[str] = set()
 
@@ -1858,6 +2001,7 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
         all_probe_rels.update(sp['remote_file_hashes'].keys())
         all_check_images.update(sp.get('pinned_images', {}).values())
         all_check_images.update(sp.get('expected_service_images', {}).values())
+        all_inspect_image_refs.update(sp.get('expected_image_refs', {}).keys())
         for svc_info in sp.get('services', {}).values():
             if svc_info.get('new_service') and svc_info.get('repo_image'):
                 all_check_images.add(svc_info['repo_image'])
@@ -1879,6 +2023,7 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
             'rollback_dir': plan['rollback_dir'],
             'probe_paths': sorted(all_probe_rels),
             'check_images': sorted(all_check_images),
+            'inspect_images': sorted(all_inspect_image_refs),
             'check_volumes': sorted(all_check_volumes),
             'writable_dirs': sorted(all_writable_dirs),
             'docker_sudo': bool(args.docker_sudo or plan.get('docker_sudo')),
@@ -1904,18 +2049,37 @@ def cmd_apply(root: Path, manifest: dict, manifest_sha: str, args: argparse.Name
         raise SshMigrationError(f'Remote rollback parent directory is not writable: {plan["rollback_dir"]}')
 
     probed_now = pre.get('probed_files', {})
+    resolved_now = pre.get('resolved_images', {})
     containers_now = pre.get('containers', [])
     for sname in plan['stack_order']:
         sp = plan['stacks'][sname]
+        for img_ref, expected_id in sorted(sp.get('expected_image_refs', {}).items()):
+            actual_id = resolved_now.get(img_ref)
+            if actual_id != expected_id:
+                raise SshMigrationError(
+                    f'Image tag drift detected during preflight for stack "{sname}": '
+                    f'"{img_ref}" resolved to {actual_id or "missing"} instead of planned {expected_id}; '
+                    'rerun plan before applying'
+                )
         matched_now = [
             c for c in containers_now
             if c.get('working_dir') and posixpath.normpath(c['working_dir']) == sp['remote_stack_dir']
         ]
         cur_hashes: dict[str, str | None] = {}
         for rel in sp['remote_file_hashes']:
-            info = probed_now.get(rel, {})
+            if rel not in probed_now:
+                raise SshMigrationError(f'Preflight probe response missing expected path: {rel}')
+            info = probed_now[rel]
+            if info.get('escape_error'):
+                raise SshMigrationError(f'Remote path escapes source root during preflight: {rel}')
             if info.get('is_symlink'):
                 raise SshMigrationError(f'Refusing symlink appeared at remote path since plan: {rel}')
+            if info.get('permission_denied'):
+                raise SshMigrationError(f'Permission denied probing remote path during preflight: {rel}')
+            if info.get('exists') and not info.get('is_file'):
+                raise SshMigrationError(f'Remote path is not a regular file during preflight: {rel}')
+            if info.get('exists') and not info.get('sha256'):
+                raise SshMigrationError(f'Unable to hash existing remote file during preflight: {rel}')
             cur_hashes[rel] = info.get('sha256') if info.get('exists') else None
         cur_fp = compute_remote_fingerprint(matched_now, sp['pinned_volumes'], cur_hashes)
         if cur_fp != sp['remote_state_fingerprint']:

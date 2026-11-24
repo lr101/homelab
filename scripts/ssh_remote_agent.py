@@ -27,6 +27,7 @@ STACK_NAME_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*\Z')
 PROJECT_NAME_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*\Z')
 SERVICE_NAME_RE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*\Z')
 FILENAME_RE = re.compile(r'[A-Za-z0-9._-]+\Z')
+ROLLBACK_OVERRIDE_FILENAME = '.homelab-rollback.override.yml'
 
 DOCKER_FORMAT = (
     '{"id":{{json .Id}},"name":{{json .Name}},"image":{{json .Image}},"configured_image":{{json .Config.Image}},'
@@ -56,6 +57,30 @@ SUDO_COMPOSE_EXEC = (
     'for k,v in (p.get("env_updates") or {}).items(): env[k]=v\n'
     'fd=os.open(os.devnull,os.O_RDONLY);os.dup2(fd,0);os.close(fd);'
     'os.execvpe(p["argv"][0],p["argv"],env)'
+)
+
+SUDO_STAT_PATHS = (
+    'import json,os,stat,sys\n'
+    'from pathlib import Path\n'
+    'out={}\n'
+    'for raw in json.load(sys.stdin):\n'
+    '    p=Path(raw)\n'
+    '    try:\n'
+    '        lst=os.lstat(p)\n'
+    '    except (FileNotFoundError,NotADirectoryError):\n'
+    '        out[raw]={"exists":False,"is_symlink":False,"is_file":False,"is_dir":False,"realpath":str(p),"permission_denied":False}\n'
+    '        continue\n'
+    '    except PermissionError:\n'
+    '        out[raw]={"exists":None,"is_symlink":False,"is_file":False,"is_dir":False,"realpath":raw,"permission_denied":True}\n'
+    '        continue\n'
+    '    try:\n'
+    '        st=p.stat()\n'
+    '        out[raw]={"exists":True,"is_symlink":stat.S_ISLNK(lst.st_mode),"is_file":stat.S_ISREG(st.st_mode),"is_dir":stat.S_ISDIR(st.st_mode),"realpath":str(p.resolve()),"mode":stat.S_IMODE(st.st_mode),"permission_denied":False}\n'
+    '    except FileNotFoundError:\n'
+    '        out[raw]={"exists":False,"is_symlink":stat.S_ISLNK(lst.st_mode),"is_file":False,"is_dir":False,"realpath":raw,"permission_denied":False}\n'
+    '    except PermissionError:\n'
+    '        out[raw]={"exists":True,"is_symlink":stat.S_ISLNK(lst.st_mode),"is_file":False,"is_dir":False,"realpath":raw,"permission_denied":True}\n'
+    'print(json.dumps(out))\n'
 )
 
 
@@ -94,8 +119,23 @@ def is_compose_definition_path(path: Path) -> bool:
     )
 
 
+def _harvest_json_values(obj, secrets: set[str]) -> None:
+    if isinstance(obj, str):
+        if len(obj) >= 3:
+            secrets.add(obj)
+        stripped = obj.strip()
+        if len(stripped) >= 3:
+            secrets.add(stripped)
+    elif isinstance(obj, dict):
+        for val in obj.values():
+            _harvest_json_values(val, secrets)
+    elif isinstance(obj, list):
+        for item in obj:
+            _harvest_json_values(item, secrets)
+
+
 def harvest_secret_values(raw: bytes, secrets: set[str]) -> None:
-    """Extract plausible secret values from dotenv/INI/YAML/raw secret files for redaction."""
+    """Extract plausible secret values from dotenv/INI/YAML/JSON/raw secret files for redaction."""
     if not raw or len(raw) > 262144:
         return
     try:
@@ -105,6 +145,12 @@ def harvest_secret_values(raw: bytes, secrets: set[str]) -> None:
     stripped_whole = text.strip()
     if stripped_whole and '\n' not in stripped_whole and len(stripped_whole) >= 3:
         secrets.add(stripped_whole)
+    # Parse valid JSON payloads (including nested objects/arrays and escaped strings)
+    if stripped_whole and stripped_whole[0] in ('{', '['):
+        try:
+            _harvest_json_values(json.loads(text), secrets)
+        except ValueError:
+            pass
     for line in text.splitlines():
         s = line.strip()
         if not s or s.startswith('#'):
@@ -121,12 +167,21 @@ def harvest_secret_values(raw: bytes, secrets: set[str]) -> None:
         elif ':' in s:
             _, _, val = s.partition(':')
             val_s = val.strip()
-            if len(val_s) >= 3:
-                secrets.add(val_s)
-            if len(val_s) >= 2 and val_s[0] == val_s[-1] and val_s[0] in ("'", '"'):
-                inner = val_s[1:-1]
-                if len(inner) >= 3:
-                    secrets.add(inner)
+            val_no_comma = val_s.rstrip(',').strip()
+            for candidate in (val_s, val_no_comma):
+                if len(candidate) >= 3:
+                    secrets.add(candidate)
+                if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in ("'", '"'):
+                    inner = candidate[1:-1]
+                    if candidate[0] == '"':
+                        try:
+                            unescaped = json.loads(candidate)
+                            if isinstance(unescaped, str) and len(unescaped) >= 3:
+                                secrets.add(unescaped)
+                        except ValueError:
+                            pass
+                    if len(inner) >= 3:
+                        secrets.add(inner)
 
 
 def _is_within(child: Path, parent: Path) -> bool:
@@ -171,19 +226,26 @@ def resolve_inside(root: Path, rel_or_abs: str, *, reject_symlinks: bool = False
     if not _is_within(lexical, root_real):
         raise ValueError(f'Path escapes allowed root: {rel_or_abs}')
 
-    # Walk every component strictly beneath root_real to catch symlinks (including dangling)
+    # Walk every component strictly beneath root_real using explicit lstat to catch symlinks & distinguish PermissionError
     rel_parts = lexical.relative_to(root_real).parts
     if reject_symlinks:
         cur = root_real
         for part in rel_parts:
             cur = cur / part
-            if cur.is_symlink():
+            try:
+                st = os.lstat(cur)
+            except (FileNotFoundError, NotADirectoryError):
+                break
+            except PermissionError:
+                raise
+            if stat.S_ISLNK(st.st_mode):
                 raise ValueError(f'Refusing symlink path inside allowed root: {rel_or_abs}')
+        return lexical
 
     resolved = lexical.resolve(strict=False)
     if not _is_within(resolved, root_real):
         raise ValueError(f'Path escapes allowed root: {rel_or_abs}')
-    return lexical if reject_symlinks else resolved
+    return resolved
 
 
 def ensure_disjoint_rollback_dir(rollback_dir: Path, remote_root: Path) -> Path:
@@ -436,59 +498,96 @@ def probe_paths(source_root: Path, rel_paths: list[str]) -> dict:
     for rel in rel_paths:
         try:
             target = resolve_inside(root_real, rel, reject_symlinks=True)
+        except PermissionError:
+            probed[rel] = {
+                'exists': None,
+                'is_symlink': False,
+                'is_file': False,
+                'is_dir': False,
+                'readable': False,
+                'permission_denied': True,
+            }
+            continue
         except ValueError as exc:
             msg = str(exc)
             if 'symlink' in msg.lower():
-                probed[rel] = {'exists': True, 'is_symlink': True, 'is_file': False, 'readable': False, 'permission_denied': False}
+                probed[rel] = {'exists': True, 'is_symlink': True, 'is_file': False, 'is_dir': False, 'readable': False, 'permission_denied': False}
             else:
                 probed[rel] = {'exists': False, 'escape_error': True}
             continue
-        if not os.path.lexists(target):
-            probed[rel] = {'exists': False, 'is_symlink': False, 'is_file': False, 'readable': False, 'permission_denied': False}
-            continue
-        if target.is_symlink():
-            probed[rel] = {'exists': True, 'is_symlink': True, 'is_file': False, 'readable': False, 'permission_denied': False}
-            continue
         try:
-            st = target.stat()
-            is_file = stat.S_ISREG(st.st_mode)
-            is_dir = stat.S_ISDIR(st.st_mode)
-            info: dict = {
-                'exists': True,
-                'is_symlink': False,
-                'is_file': is_file,
-                'is_dir': is_dir,
-                'mode': stat.S_IMODE(st.st_mode),
-                'realpath': str(target.resolve()),
-                'permission_denied': False,
-                'readable': False,
-            }
-            if is_file:
-                try:
-                    info['sha256'] = sha256_file(target)
-                    info['readable'] = True
-                except PermissionError:
-                    info['permission_denied'] = True
-            probed[rel] = info
+            lst = os.lstat(target)
+        except (FileNotFoundError, NotADirectoryError):
+            probed[rel] = {'exists': False, 'is_symlink': False, 'is_file': False, 'is_dir': False, 'readable': False, 'permission_denied': False}
+            continue
         except PermissionError:
-            probed[rel] = {'exists': True, 'is_symlink': False, 'permission_denied': True, 'readable': False}
+            probed[rel] = {'exists': None, 'is_symlink': False, 'is_file': False, 'is_dir': False, 'readable': False, 'permission_denied': True}
+            continue
+        if stat.S_ISLNK(lst.st_mode):
+            probed[rel] = {'exists': True, 'is_symlink': True, 'is_file': False, 'is_dir': False, 'readable': False, 'permission_denied': False}
+            continue
+        is_file = stat.S_ISREG(lst.st_mode)
+        is_dir = stat.S_ISDIR(lst.st_mode)
+        info: dict = {
+            'exists': True,
+            'is_symlink': False,
+            'is_file': is_file,
+            'is_dir': is_dir,
+            'mode': stat.S_IMODE(lst.st_mode),
+            'realpath': str(target),
+            'permission_denied': False,
+            'readable': False,
+        }
+        if is_file:
+            try:
+                info['sha256'] = sha256_file(target)
+                info['readable'] = True
+            except PermissionError:
+                info['permission_denied'] = True
+        probed[rel] = info
     return probed
 
 
-def check_abs_paths(paths: list[str]) -> dict:
+def check_abs_paths(paths: list[str], docker_sudo: bool = False) -> dict:
     out = {}
+    denied_paths: list[str] = []
     for raw in paths:
         p = Path(raw)
-        if not os.path.lexists(p):
-            out[raw] = {'exists': False, 'is_file': False, 'is_dir': False, 'realpath': str(p)}
+        try:
+            lst = os.lstat(p)
+        except (FileNotFoundError, NotADirectoryError):
+            out[raw] = {
+                'exists': False,
+                'is_symlink': False,
+                'is_file': False,
+                'is_dir': False,
+                'realpath': str(p),
+                'permission_denied': False,
+            }
+            continue
+        except PermissionError:
+            out[raw] = {
+                'exists': None,
+                'is_symlink': False,
+                'is_file': False,
+                'is_dir': False,
+                'realpath': raw,
+                'permission_denied': True,
+            }
+            denied_paths.append(raw)
             continue
         try:
             st = p.stat()
+            try:
+                real = str(p.resolve())
+            except PermissionError:
+                real = raw
             info: dict = {
                 'exists': True,
+                'is_symlink': stat.S_ISLNK(lst.st_mode),
                 'is_file': stat.S_ISREG(st.st_mode),
                 'is_dir': stat.S_ISDIR(st.st_mode),
-                'realpath': str(p.resolve()),
+                'realpath': real,
                 'mode': stat.S_IMODE(st.st_mode),
                 'permission_denied': False,
             }
@@ -499,9 +598,43 @@ def check_abs_paths(paths: list[str]) -> dict:
                     info['permission_denied'] = True
             out[raw] = info
         except FileNotFoundError:
-            out[raw] = {'exists': False, 'is_symlink': p.is_symlink(), 'is_file': False, 'is_dir': False, 'realpath': raw}
+            out[raw] = {
+                'exists': False,
+                'is_symlink': stat.S_ISLNK(lst.st_mode),
+                'is_file': False,
+                'is_dir': False,
+                'realpath': raw,
+                'permission_denied': False,
+            }
         except PermissionError:
-            out[raw] = {'exists': True, 'permission_denied': True, 'realpath': raw}
+            out[raw] = {
+                'exists': True,
+                'is_symlink': stat.S_ISLNK(lst.st_mode),
+                'is_file': False,
+                'is_dir': False,
+                'realpath': raw,
+                'permission_denied': True,
+            }
+            denied_paths.append(raw)
+
+    # When --docker-sudo is enabled, try read-only stat/realpath via sudo for paths whose traversal was denied
+    if docker_sudo and denied_paths:
+        proc = subprocess.run(
+            ['sudo', '-n', '--', 'python3', '-c', SUDO_STAT_PATHS],
+            input=json.dumps(denied_paths),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0:
+            try:
+                sudo_out = json.loads(proc.stdout)
+            except ValueError:
+                sudo_out = {}
+            if isinstance(sudo_out, dict):
+                for raw, sinfo in sudo_out.items():
+                    if isinstance(sinfo, dict) and not sinfo.get('permission_denied'):
+                        out[raw] = sinfo
     return out
 
 
@@ -513,7 +646,7 @@ def handle_audit(req: dict) -> dict:
     docker_info = run_docker_audit(docker_sudo)
     net_info, net_errors = collect_network_telemetry()
     probed = probe_paths(source_root, req.get('probe_paths', []))
-    checked = check_abs_paths(req.get('check_paths', []))
+    checked = check_abs_paths(req.get('check_paths', []), docker_sudo=docker_sudo)
     resolved_imgs = inspect_image_ids(docker_sudo, req.get('inspect_images', []))
     return {
         'ok': True,
@@ -542,7 +675,7 @@ def handle_inspect_paths(req: dict) -> dict:
         return {'ok': False, 'error': f'Source root is not an existing directory on remote host: {source_root}'}
     docker_sudo = bool(req.get('docker_sudo', False))
     probed = probe_paths(source_root, req.get('probe_paths', []))
-    checked = check_abs_paths(req.get('check_paths', []))
+    checked = check_abs_paths(req.get('check_paths', []), docker_sudo=docker_sudo)
     resolved_imgs = inspect_image_ids(docker_sudo, req.get('inspect_images', []))
     return {
         'ok': True,
@@ -570,12 +703,17 @@ def handle_capture_host(req: dict) -> dict:
         blocked = False
         for part in parent_rel.parts:
             cur = cur / part
-            if os.path.lexists(cur):
-                if cur.is_dir() and not os.access(cur, os.R_OK | os.X_OK):
-                    unreadable.append('/' + str(cur.relative_to(system_root)))
-                    blocked = True
-                    break
-            else:
+            try:
+                lst = os.lstat(cur)
+            except (FileNotFoundError, NotADirectoryError):
+                blocked = True
+                break
+            except PermissionError:
+                unreadable.append('/' + str(cur.relative_to(system_root)))
+                blocked = True
+                break
+            if stat.S_ISDIR(lst.st_mode) and not os.access(cur, os.R_OK | os.X_OK):
+                unreadable.append('/' + str(cur.relative_to(system_root)))
                 blocked = True
                 break
         if blocked or not parent_abs.is_dir():
@@ -638,23 +776,33 @@ def handle_read_files(req: dict) -> dict:
     for rel in req.get('paths', []):
         try:
             target = resolve_inside(source_root, rel, reject_symlinks=True)
+        except PermissionError:
+            results[rel] = {'status': 'permission_denied'}
+            continue
         except ValueError as exc:
             results[rel] = {'status': 'symlink_error' if 'symlink' in str(exc).lower() else 'escape_error'}
             continue
-        if not os.path.lexists(target):
+        try:
+            lst = os.lstat(target)
+        except (FileNotFoundError, NotADirectoryError):
             results[rel] = {'status': 'missing'}
             continue
-        if not target.is_file():
+        except PermissionError:
+            results[rel] = {'status': 'permission_denied'}
+            continue
+        if stat.S_ISLNK(lst.st_mode):
+            results[rel] = {'status': 'symlink_error'}
+            continue
+        if not stat.S_ISREG(lst.st_mode):
             results[rel] = {'status': 'not_a_file'}
             continue
         try:
             raw = target.read_bytes()
-            st = target.stat()
             results[rel] = {
                 'status': 'found',
                 'b64': base64.b64encode(raw).decode('ascii'),
                 'sha256': sha256_bytes(raw),
-                'mode': stat.S_IMODE(st.st_mode),
+                'mode': stat.S_IMODE(lst.st_mode),
             }
         except PermissionError:
             results[rel] = {'status': 'permission_denied'}
@@ -701,19 +849,29 @@ def handle_preflight(req: dict) -> dict:
         if proc.returncode != 0:
             missing_volumes.append(vol)
 
-    unwritable_dirs = []
-    for d in req.get('writable_dirs', []):
-        probe = Path(d)
-        while not probe.exists() and probe.parent != probe:
-            probe = probe.parent
-        if not probe.is_dir() or not os.access(probe, os.W_OK | os.X_OK):
-            unwritable_dirs.append(d)
+    def _check_dir_writable(path_obj: Path) -> bool:
+        probe = path_obj
+        while True:
+            try:
+                st = os.stat(probe)
+                return stat.S_ISDIR(st.st_mode) and os.access(probe, os.W_OK | os.X_OK)
+            except (FileNotFoundError, NotADirectoryError):
+                if probe.parent == probe:
+                    return False
+                probe = probe.parent
+            except PermissionError:
+                return False
 
-    rollback_exists = os.path.lexists(rollback_dir)
-    rb_probe = rollback_dir
-    while not rb_probe.exists() and rb_probe.parent != rb_probe:
-        rb_probe = rb_probe.parent
-    rollback_writable = rb_probe.is_dir() and os.access(rb_probe, os.W_OK | os.X_OK)
+    unwritable_dirs = [d for d in req.get('writable_dirs', []) if not _check_dir_writable(Path(d))]
+
+    try:
+        os.lstat(rollback_dir)
+        rollback_exists = True
+    except (FileNotFoundError, NotADirectoryError):
+        rollback_exists = False
+    except PermissionError:
+        rollback_exists = False
+    rollback_writable = _check_dir_writable(rollback_dir)
 
     audit_res.update({
         'missing_images': missing_images,
@@ -826,6 +984,13 @@ def _remove_new_service_containers(
     if not compose_rm_ok:
         audit = run_docker_audit(docker_sudo)
         fallback_ok = True
+        audit_errs = audit.get('errors') or []
+        if audit_errs:
+            fallback_ok = False
+            errors.append(
+                'Fallback Docker container inventory failed during new-service cleanup: '
+                + redact('; '.join(audit_errs), secrets)
+            )
         for c in audit.get('containers', []):
             if c.get('project') == project_name and c.get('service') in new_services:
                 cid = c.get('id') or c.get('name')
@@ -954,30 +1119,86 @@ def _restore_stack_state(
         for s in (state.get('originally_running_services') or [])
     ]
     if should_compose and state.get('original_compose_files') and orig_running:
-        # Pin original running image IDs if local tag no longer resolves to the exact original image ID
+        def _compose_v1_build_names(proj: str, service: str) -> set[str]:
+            p_raw = proj.lower()
+            p_v1 = re.sub(r'[^a-z0-9]', '', p_raw)
+            s_raw = service.lower()
+            return {
+                f'{p_raw}_{s_raw}',
+                f'{p_raw}_{s_raw}:latest',
+                f'{p_v1}_{s_raw}',
+                f'{p_v1}_{s_raw}:latest',
+            }
+
+        # Load restored preexisting primary_env_file (e.g. .secrets.env on repeat adopt) while excluding newly created/removed files
+        rb_env_updates: dict[str, str] = {}
+        primary_env = state.get('primary_env_file')
+        if primary_env:
+            created_norm: set[str] = set()
+            for entry in state.get('created_files', []):
+                raw_p = entry.get('path')
+                if not raw_p:
+                    continue
+                try:
+                    created_norm.add(str(resolve_inside(remote_root, raw_p, reject_symlinks=True)))
+                except Exception:
+                    created_norm.add(posixpath.normpath(str(raw_p)))
+            try:
+                primary_env_path = resolve_inside(remote_root, primary_env, reject_symlinks=True)
+            except Exception as exc:
+                report['ok'] = False
+                report['errors'].append(f'Failed resolving restored primary env file {primary_env}: {redact(str(exc), secrets)}')
+                return report
+            if str(primary_env_path) not in created_norm and primary_env_path.is_file():
+                try:
+                    rb_env_updates = load_raw_env_file(primary_env_path, secrets)
+                except Exception as exc:
+                    report['ok'] = False
+                    report['errors'].append(f'Failed loading restored primary env file {primary_env}: {redact(str(exc), secrets)}')
+                    return report
+
+        # Pin original running image IDs if local tag no longer resolves to the exact original image ID,
+        # OR if a build-only Compose v1 underscore image differs from Compose v2 default <project>-<service>.
         rb_pins_needed: dict[str, str] = {}
         rb_pin_meta = state.get('rollback_pinned_images') or {}
-        refs_to_check = [
-            info['configured_image']
-            for svc, info in rb_pin_meta.items()
-            if svc in orig_running and info.get('configured_image') and not str(info['configured_image']).startswith('sha256:')
-        ]
-        resolved_orig = inspect_image_ids(docker_sudo, sorted(set(refs_to_check))) if refs_to_check else {}
+        refs_to_check: set[str] = set()
+        for svc, info in rb_pin_meta.items():
+            if svc not in orig_running:
+                continue
+            cfg_img = str(info.get('configured_image') or '')
+            if cfg_img and not cfg_img.startswith('sha256:'):
+                refs_to_check.add(cfg_img)
+            if info.get('build_only') or cfg_img.lower() in _compose_v1_build_names(project_name, svc):
+                refs_to_check.add(f'{project_name.lower()}-{svc.lower()}')
+        resolved_orig = inspect_image_ids(docker_sudo, sorted(refs_to_check)) if refs_to_check else {}
         for svc in orig_running:
             info = rb_pin_meta.get(svc)
             if not info or not info.get('image_id'):
                 continue
             cfg_img = str(info.get('configured_image') or '')
-            if not cfg_img or cfg_img.startswith('sha256:') or resolved_orig.get(cfg_img) != info['image_id']:
+            v2_default = f'{project_name.lower()}-{svc.lower()}'
+            is_v1_underscore = cfg_img.lower() in _compose_v1_build_names(project_name, svc)
+            is_build_only = bool(info.get('build_only'))
+            if (
+                not cfg_img
+                or cfg_img.startswith('sha256:')
+                or resolved_orig.get(cfg_img) != info['image_id']
+                or is_v1_underscore
+                or (is_build_only and resolved_orig.get(v2_default) != info['image_id'])
+            ):
                 rb_pins_needed[svc] = info['image_id']
 
         rb_override_path: Path | None = None
+        rb_override_abs = posixpath.normpath(posixpath.join(str(remote_stack_dir), ROLLBACK_OVERRIDE_FILENAME))
         try:
             compose_base = ['-p', project_name]
             for cfile in state['original_compose_files']:
+                norm_cf = posixpath.normpath(cfile)
+                if norm_cf == rb_override_abs or Path(norm_cf).name == ROLLBACK_OVERRIDE_FILENAME:
+                    continue
                 compose_base.extend(['-f', cfile])
             if rb_pins_needed:
-                rb_override_name = '.homelab-rollback.override.yml'
+                rb_override_name = ROLLBACK_OVERRIDE_FILENAME
                 rb_override_path = resolve_inside(remote_root, str(remote_stack_dir / rb_override_name), reject_symlinks=True)
                 atomic_write_bytes(rb_override_path, _format_minimal_override_yaml(rb_pins_needed).encode('utf-8'), 0o600)
                 compose_base.extend(['-f', rb_override_name])
@@ -997,7 +1218,7 @@ def _restore_stack_state(
                     docker_sudo,
                     compose_base + ['up', '-d', '--no-build', '--pull', 'never', '--no-deps', '--'] + w_svcs,
                     str(remote_stack_dir),
-                    env_updates={},
+                    env_updates=rb_env_updates,
                     compose_home=compose_home,
                 )
                 if proc.returncode != 0:
