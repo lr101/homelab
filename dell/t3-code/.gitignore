@@ -3,3 +3,5 @@ codex-data-eli/**
 t3-data/**  
 workspace/**
 mise-data/**
+
+__pycache__/

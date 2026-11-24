@@ -86,9 +86,19 @@ if [[ "$dry_run" == true ]]; then
   exit 0
 fi
 
-for command_name in pg_isready psql python3 runuser; do
+for command_name in pg_isready psql python3; do
   command -v "$command_name" >/dev/null 2>&1 || die "required command is missing: $command_name"
 done
+
+# The T3 server runs without root so Chrome can keep its sandbox. The container
+# grants only psql as the local postgres account; retain support for root hosts.
+postgres_psql() {
+  if (( EUID == 0 )); then
+    runuser -u postgres -- psql "$@"
+  else
+    sudo -n -u postgres -- psql "$@"
+  fi
+}
 
 set -a
 # shellcheck disable=SC1090
@@ -134,26 +144,26 @@ pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1 || die 'PostgreSQL is not ready 
 latest_migration=$(find "$repo_root/go-server/internal/db/migrations" -maxdepth 1 -type f -name '[0-9]*.up.sql' -printf '%f\n' | sort | tail -n 1 | cut -d_ -f1)
 [[ "$latest_migration" =~ ^[0-9]+$ ]] || die 'could not determine the latest embedded migration'
 
-runuser -u postgres -- psql -d postgres -v ON_ERROR_STOP=1 \
+postgres_psql -d postgres -v ON_ERROR_STOP=1 \
   -v preview_db="$db_name" -v preview_owner="$db_owner" <<'SQL' >/dev/null
 SELECT format('CREATE DATABASE %I OWNER %I', :'preview_db', :'preview_owner')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'preview_db')
 \gexec
 SQL
 
-actual_owner=$(runuser -u postgres -- psql -d postgres -Atqc \
+actual_owner=$(postgres_psql -d postgres -Atqc \
   "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = '$db_name'")
 [[ "$actual_owner" == "$db_owner" ]] || die "preview database owner mismatch for $db_name"
 
-runuser -u postgres -- psql -q -d "$db_name" -v ON_ERROR_STOP=1 \
+postgres_psql -q -d "$db_name" -v ON_ERROR_STOP=1 \
   -c 'CREATE EXTENSION IF NOT EXISTS postgis' \
   -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"' >/dev/null
 
-has_migrations=$(runuser -u postgres -- psql -d "$db_name" -Atqc \
+has_migrations=$(postgres_psql -d "$db_name" -Atqc \
   "SELECT to_regclass('public.schema_migrations') IS NOT NULL")
 migration_state=none
 if [[ "$has_migrations" == t ]]; then
-  migration_state=$(runuser -u postgres -- psql -d "$db_name" -Atqc \
+  migration_state=$(postgres_psql -d "$db_name" -Atqc \
     "SELECT version::text || ':' || dirty::text FROM schema_migrations ORDER BY version DESC LIMIT 1")
 fi
 if [[ "$migration_state" != none ]]; then

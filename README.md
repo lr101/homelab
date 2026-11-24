@@ -31,7 +31,14 @@ This repository contains setup templates and configuration files for various app
 | **adguard** | Adguardhome | [dns](https://dns.medion.lr-projects.de) | `53` | configured | monitored | proxy |
 |  | Adguard Exporter | - | - | configured | monitored | - |
 | **hiring_scraper** | Db | - | - | configured | manual | - |
+|  | Migrate | - | - | configured | manual | - |
 |  | App | [jobs](https://jobs.medion.lr-projects.de) | - | configured | manual | - |
+|  | Worker | - | - | configured | manual | - |
+|  | Discovery Worker | - | - | configured | manual | - |
+|  | Search Snapshot Worker | - | - | configured | manual | - |
+|  | Profile Match Worker | - | - | configured | manual | - |
+|  | Semantic Search Worker | - | - | configured | manual | - |
+|  | Application Preparation Worker | - | - | configured | manual | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | configured | monitored | app (declared) |
 |  | Immich Machine Learning | - | - | configured | monitored | - |
 |  | Redis | - | - | configured | monitored | - |
