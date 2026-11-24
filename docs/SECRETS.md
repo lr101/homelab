@@ -6,7 +6,10 @@ The deployment wrapper decrypts selected files in memory, validates every select
 
 ## Initial setup
 
-Requirements: SOPS and age from their official releases, Python 3.9+, and Docker Compose **2.30+** for raw environment files. Tests additionally require the pinned packages in `scripts/requirements.txt`. Install tools on each deployment host; CI needs no production keys.
+Requirements:
+
+- **Controller-driven SSH migration (`scripts/ssh-migrate.py`):** Install SOPS, age, Python 3.10+, and `scripts/requirements.txt` (`PyYAML`, `python-dotenv`) on your controller workstation along with SSH access (`known_hosts` populated). Remote hosts only need ordinary Python 3 (stdlib) and Docker Engine + Compose **2.30+** (for `format: raw` env files)—no remote Git tooling checkout, SOPS binary, private age keys, or Python packages are required.
+- **Local host wrapper (`scripts/sops-secrets.py`):** If operating directly on a server checkout, install SOPS, age, Python 3.9+, and Docker Compose **2.30+** on that host. CI needs no production keys.
 
 Generate one age identity per host, **outside the repository**, using a protected directory owned by the deployment account:
 
@@ -20,11 +23,31 @@ export SOPS_AGE_KEY_FILE="$HOME/.config/homelab/dell.agekey"
 
 Create a separate recovery identity offline. Keep its private key in an independent encrypted recovery kit. Copy `.sops.yaml.example` to `.sops.yaml` and replace the placeholder recipients with each host's **public** age recipient and the recovery public recipient. Commit `.sops.yaml`; never commit the private keys. There is intentionally no working recipient configuration until real keys are provisioned.
 
-For the current local wrapper, authorize that host's public recipient and the recovery recipient. For the proposed push deployment, also authorize the controller's public recipient for the hosts it manages; the controller needs its private identity locally, while targets need no private key for ordinary pushes. Do not distribute a universal private identity to all servers. Host-specific identities keep Dell from decrypting Medion's secrets. SOPS creation rules apply when files are created; after changing recipients run `sops updatekeys FILE` for existing files and review the resulting encrypted diff. Removing a recipient cannot revoke previously decrypted copies or old Git history; rotate affected upstream credentials if a key is compromised.
+For controller-side SSH migration and adoption (`scripts/ssh-migrate.py`), authorize the controller's public recipient plus the offline recovery recipient (and optionally each host's public recipient if you also use the local wrapper); the controller keeps its private identity locally, while remote hosts need no private age key. Do not distribute a universal private identity to all servers. Host-specific identities keep Dell from decrypting Medion's secrets. SOPS creation rules apply when files are created; after changing recipients run `sops updatekeys FILE` for existing files and review the resulting encrypted diff. Removing a recipient cannot revoke previously decrypted copies or old Git history; rotate affected upstream credentials if a key is compromised.
 
 ## Migrate existing values
 
-Use the [operator and agent migration runbook](MIGRATION.md) for the read-only audit, encrypted host capture, and dry-run legacy importer. The controller-only Ansible layer is specified there as follow-up work; the current wrapper still operates on a local checkout.
+Use the [SSH migration runbook](MIGRATION.md) with `scripts/ssh-migrate.py` to audit existing servers, capture encrypted host baselines (`secrets/HOST/host-config.enc.json`), import legacy `.env`/credential files into SOPS, plan identity-preserving in-place adoption, apply with a tested-backup gate, and roll back over SSH—all from a single controller machine.
+
+```sh
+# 1. Prepare (read-only on remote; dry-run locally until --apply):
+python3 scripts/ssh-migrate.py prepare --host medion --ssh-target medion \
+  --source-root /home/lr/homelab --audit-output /tmp/medion-audit.json \
+  --all-stacks --skip-not-deployed --sudo --apply
+
+# 2. Plan in-place adoption (read-only on remote; verifies project/volumes/mounts/images/secrets):
+python3 scripts/ssh-migrate.py plan --host medion --ssh-target medion \
+  --source-root /home/lr/homelab --stack nextcloud --plan /tmp/medion-plan.json
+
+# 3. Apply after taking and testing an application-data backup:
+python3 scripts/ssh-migrate.py apply --plan /tmp/medion-plan.json \
+  --confirm-backup-tested --backup-evidence "<snapshot ID and restore test>"
+
+# 4. Explicit rollback over SSH if needed (files/Compose only; restore DB backups separately):
+python3 scripts/ssh-migrate.py rollback --plan /tmp/medion-plan.json
+```
+
+For brand-new (never-deployed) stacks or manual edits without legacy files, generate a skeleton and edit with SOPS directly:
 
 Migrate one stack at a time. Preserve a protected backup of the current configuration and record deployed image versions. **Keep the actual credentials unchanged during migration**, especially database passwords.
 

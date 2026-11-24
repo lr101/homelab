@@ -55,10 +55,10 @@ def read_literal(path):
         return source.read()
 
 
-def read_dotenv(path):
+def parse_dotenv_text(text):
     """Parse a conservative dotenv subset without running shell or interpolation."""
     values = {}
-    for binding in parse_stream(io.StringIO(path.read_text())):
+    for binding in parse_stream(io.StringIO(text)):
         if binding.error:
             raise MigrationError(f'Unsupported dotenv syntax at line {binding.original.line}')
         if binding.key is None:
@@ -79,6 +79,10 @@ def read_dotenv(path):
             raise MigrationError(f'Unsupported dotenv escape in {binding.key}; review the literal value')
         values[binding.key] = binding.value
     return values
+
+
+def read_dotenv(path):
+    return parse_dotenv_text(path.read_text())
 
 
 def import_values(source, entry):
