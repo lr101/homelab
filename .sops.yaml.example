@@ -1,0 +1,14 @@
+# Copy to .sops.yaml, replace PUBLIC recipients, then commit that configuration.
+# Each host gets its own recipient plus an offline recovery recipient.
+# Private keys never belong in this repository.
+creation_rules:
+  - path_regex: ^secrets/dell/.*\.enc\.json$
+    age: age1REPLACE_DELL_PUBLIC_RECIPIENT,age1REPLACE_RECOVERY_PUBLIC_RECIPIENT
+  - path_regex: ^secrets/medion/.*\.enc\.json$
+    age: age1REPLACE_MEDION_PUBLIC_RECIPIENT,age1REPLACE_RECOVERY_PUBLIC_RECIPIENT
+  - path_regex: ^secrets/thinkpad/.*\.enc\.json$
+    age: age1REPLACE_THINKPAD_PUBLIC_RECIPIENT,age1REPLACE_RECOVERY_PUBLIC_RECIPIENT
+  - path_regex: ^secrets/ionos/.*\.enc\.json$
+    age: age1REPLACE_IONOS_PUBLIC_RECIPIENT,age1REPLACE_RECOVERY_PUBLIC_RECIPIENT
+  - path_regex: ^secrets/synology/.*\.enc\.json$
+    age: age1REPLACE_SYNOLOGY_PUBLIC_RECIPIENT,age1REPLACE_RECOVERY_PUBLIC_RECIPIENT

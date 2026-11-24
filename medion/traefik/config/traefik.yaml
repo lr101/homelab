@@ -19,11 +19,11 @@ entryPoints:
         idleTimeout: 600s
         writeTimeout: 600s
 log:
-  level: DEBUG
+  level: INFO
 providers:
   docker:
     exposedByDefault: false
-    endpoint: "unix:///var/run/docker.sock"
+    endpoint: "tcp://socket-proxy:2375"
   file:
     directory: /etc/traefik/dynamic
     watch: true

@@ -2,7 +2,11 @@ services:
   pocket-id:
     image: ghcr.io/pocket-id/pocket-id:v2
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .secrets.env
+        format: raw
     annotations:
     - de.lr-projects.description=SSO solution
     - de.lr-projects.sso=false

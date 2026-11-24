@@ -3,9 +3,9 @@ http:
     oidc-auth:
       plugin:
         traefik-oidc-auth:
-          Secret: ${SECRET_SALT}
+          Secret: {{ env "SECRET_SALT" | quote }}
           Provider:
             Url: "https://sso.lr-projects.de"
-            ClientId: ${CLIENT_ID}
-            ClientSecret: ${CLIENT_SECRET}
+            ClientId: {{ env "CLIENT_ID" | quote }}
+            ClientSecret: {{ env "CLIENT_SECRET" | quote }}
           Scopes: ["openid", "profile", "email"]

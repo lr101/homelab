@@ -6,6 +6,16 @@ This repository contains setup templates and configuration files for various app
 
 {{tables}}
 
+The inventory describes configuration, not live verification. **Backup: configured** means a source folder and destination are declared; external mounts, exclusions, and successful restores still need checking. **Update: monitored** means Watchtower opt-in; the shared Watchtower runs in notification-only mode. **SSO: proxy** means an explicit OIDC middleware label; **app (declared)** is application SSO metadata, not a verified login test.
+
+See [operations and rollout](docs/OPERATIONS.md) for prerequisites, backup coverage, restore drills, and update procedures.
+
+## Secret management
+
+[SOPS and age](docs/SECRETS.md) encrypt per-host deployment secrets in Git. The guide covers key setup, migration, adding applications, deployment commands, and offline recovery. Private age keys and decrypted runtime files stay outside version control.
+
+See the [migration and agent handoff](docs/MIGRATION.md) before adopting an existing host or moving deployment files.
+
 ## Homelab setup
 
 The homelab uses a WireGuard VPN hosted on an Ionos VPS with a public IP to securely connect remote devices (thinkpad, medion, NAS, and mobile devices) in a private network. Services run on the thinkpad and medion laptops in my parents basement.
@@ -25,7 +35,7 @@ graph TB
     subgraph Ionos["Ionos VPS - Public IP"]
         PublicIP["Public IP Address"]
         WGServer["WireGuard Server"]
-        NginxProxy["Nginx Reverse Proxy"]
+        TraefikProxy["Traefik Reverse Proxy"]
     end
     
     subgraph VPN["🔒 WireGuard VPN Network"]
@@ -36,8 +46,8 @@ graph TB
     end
     
     Users -->|HTTPS| PublicIP
-    PublicIP --> NginxProxy
-    NginxProxy -->|Routes Services| WGServer
+    PublicIP --> TraefikProxy
+    TraefikProxy -->|Routes Services| WGServer
     WGServer -->|Encrypted Tunnel| VPN
     Mobile -.->|VPN Connection| WGServer
 ```

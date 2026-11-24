@@ -1,10 +1,14 @@
 x-bootstrap: &bootstrap
   image: ${HIRING_APP_IMAGE:?Set HIRING_APP_IMAGE to the verified Radius app image}
-  env_file: .env
+  env_file:
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
   environment:
     RADIUS_CODEX_STATE_DIR: /var/lib/radius/codex
   volumes:
-    - .env:/run/app-bootstrap.env:ro
+    - ./.secrets/app-bootstrap.env:/run/app-bootstrap.env:ro
     - ./radius_codex:/var/lib/radius/codex
   networks:
     - backend
@@ -28,7 +32,11 @@ services:
   db:
     image: ${HIRING_DB_IMAGE:?Set HIRING_DB_IMAGE to the verified Radius database image}
     restart: unless-stopped
-    env_file: .env
+    env_file:
+    - path: .env
+      required: false
+    - path: .secrets.env
+      format: raw
     volumes:
       - ./hiring_db:/var/lib/postgresql/data
     networks:
