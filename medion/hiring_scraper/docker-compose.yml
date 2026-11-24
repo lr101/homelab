@@ -88,11 +88,99 @@ services:
 
   semantic-search-worker:
     <<: *worker
+    environment:
+      RADIUS_CODEX_STATE_DIR: /var/lib/radius/codex
+      # Serve E5 embeddings to the job analysis worker on the backend network.
+      SEMANTIC_EMBEDDING_HOST: 0.0.0.0
     command: ["--worker", "semantic_search_worker"]
+
+  job-analysis-worker:
+    <<: *worker
+    # No ChatGPT login state: this worker only talks to the database and local models.
+    volumes:
+      - .env:/run/app-bootstrap.env:ro
+    environment:
+      SEMANTIC_EMBEDDING_URL: http://semantic-search-worker:8001/embed
+      JOB_ANALYSIS_LLM_URL: http://llm:8080
+      JOB_ANALYSIS_RERANK_URL: http://llm-reranker:8080
+    command: ["--worker", "job_analysis_worker"]
+
+  # Local job analysis models (docs/local-models.md upstream). CPU only; about
+  # 6 GB RAM and 4 cores together. The worker calls them one at a time. Weights
+  # download once from pinned Hugging Face revisions into the llm_models volume
+  # (a named volume, so the ./hiring_scraper backup does not include 3.4 GB of
+  # re-downloadable weights).
+  llm:
+    image: ${LLM_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b12098@sha256:ba68b6996ba6d27a49a9864452194128e118a1fcb96dd663f223a13e0a2857a8}
+    command:
+      - --host=0.0.0.0
+      - --port=8080
+      - --model=/models/Qwen3.5-4B-Q4_K_M.gguf
+      - --model-url=https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf
+      - --alias=unsloth/Qwen3.5-4B-GGUF@e87f176479d0:Qwen3.5-4B-Q4_K_M.gguf
+      - --threads=${LLM_THREADS:-4}
+      - --ctx-size=8192
+      - --parallel=1
+      - --chat-template-kwargs={"enable_thinking":false}
+      - --no-webui
+    volumes:
+      - llm_models:/models
+    networks:
+      - backend
+    # The server parses untrusted posting text: no extra kernel capabilities.
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    cpus: 4
+    cpu_shares: 256
+    mem_limit: ${LLM_MEMORY_LIMIT:-4608m}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15m
+
+  llm-reranker:
+    image: ${LLM_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b12098@sha256:ba68b6996ba6d27a49a9864452194128e118a1fcb96dd663f223a13e0a2857a8}
+    command:
+      - --host=0.0.0.0
+      - --port=8080
+      - --model=/models/qwen3-reranker-0.6b-q8_0.gguf
+      - --model-url=https://huggingface.co/ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/resolve/a02f48bb4f057028298c21fa033da2b30d7742d5/qwen3-reranker-0.6b-q8_0.gguf
+      - --alias=ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF@a02f48bb4f05:qwen3-reranker-0.6b-q8_0.gguf
+      - --reranking
+      - --threads=${LLM_THREADS:-4}
+      - --ctx-size=8192
+      - --batch-size=2048
+      - --ubatch-size=2048
+      - --no-webui
+    volumes:
+      - llm_models:/models
+    networks:
+      - backend
+    # The server parses untrusted posting text: no extra kernel capabilities.
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    cpus: 4
+    cpu_shares: 256
+    mem_limit: ${LLM_RERANKER_MEMORY_LIMIT:-1536m}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10m
 
   application-preparation-worker:
     <<: *worker
     command: ["--worker", "application_preparation_worker"]
+
+volumes:
+  llm_models:
 
 networks:
   backend:

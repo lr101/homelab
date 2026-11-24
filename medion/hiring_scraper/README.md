@@ -122,3 +122,28 @@ directory, with the old app and db image references pinned to the recorded
 images. Run `docker compose up -d --pull never --wait db app` with the original
 project name, then verify the old database revision and the public readiness
 endpoint.
+
+## Local job analysis models
+
+Radius matches jobs with two local models (upstream `docs/local-models.md`):
+`llm` (Qwen3.5-4B, about 4.5 GB RAM) and `llm-reranker` (Qwen3-Reranker-0.6B, about
+1.5 GB RAM), both llama.cpp servers on CPU. They share four cores at low CPU
+priority (`cpu_shares: 256`), so Immich, Jellyfin and Nextcloud keep precedence;
+the `job-analysis-worker` calls them one at a time. Override the limits with
+`LLM_THREADS`, `LLM_MEMORY_LIMIT` and `LLM_RERANKER_MEMORY_LIMIT` in `.env`.
+
+The first start downloads about 3.4 GB of pinned weights into the `llm_models`
+named volume (not part of the `./hiring_scraper` backup; it is re-downloadable).
+Jobs stay "Analysing…" and out of Journey until the models have read them; jobs in
+the profile's search area go first, at roughly one posting per minute on four
+cores. Requires the Radius image with migration `0044_local_job_analysis`.
+
+Check progress:
+
+```sh
+docker compose logs -f job-analysis-worker
+docker compose exec -T db psql -U postgres -d hiring \
+  -c 'SELECT status, count(*) FROM job_analyses GROUP BY status;' \
+  -c 'SELECT count(*) AS queued FROM job_analysis_queue;' \
+  -c 'SELECT count(*) AS evidence_queued FROM match_evidence_queue;'
+```

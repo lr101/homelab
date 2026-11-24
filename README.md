@@ -37,6 +37,9 @@ This repository contains setup templates and configuration files for various app
 |  | Search Snapshot Worker | - | - | - | manual | - |
 |  | Profile Match Worker | - | - | - | manual | - |
 |  | Semantic Search Worker | - | - | - | manual | - |
+|  | Job Analysis Worker | - | - | - | manual | - |
+|  | Llm | - | - | - | manual | - |
+|  | Llm Reranker | - | - | - | manual | - |
 |  | Application Preparation Worker | - | - | - | manual | - |
 | **immich-app** | Immich Server | [immich](https://immich.medion.lr-projects.de) | - | ✅ | ✅ | ✅ |
 |  | Immich Machine Learning | - | - | ✅ | ✅ | - |
