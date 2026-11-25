@@ -125,22 +125,32 @@ endpoint.
 
 ## Job analysis models
 
-Radius matches jobs with GPT-6 Luna through the connected ChatGPT subscription while
-it has headroom (five-hour window below 60%, week below 70%), and with two local
-models otherwise; Radius Settings -> Matching model switches to **Local only**. The
-`job-analysis-worker` therefore mounts `./radius_codex` like the app (upstream
-`docs/local-models.md`). The local models:
-`llm` (Qwen3.5-4B, about 4.5 GB RAM) and `llm-reranker` (Qwen3-Reranker-0.6B, about
-1.5 GB RAM), both llama.cpp servers on CPU. They share four cores at low CPU
-priority (`cpu_shares: 256`), so Immich, Jellyfin and Nextcloud keep precedence;
-the `job-analysis-worker` calls them one at a time. Override the limits with
-`LLM_THREADS`, `LLM_MEMORY_LIMIT` and `LLM_RERANKER_MEMORY_LIMIT` in `.env`.
+Radius Settings -> Matching model chooses who reads postings and checks the CV:
+**GPT-6 Luna** through the connected ChatGPT subscription (default) or the **Local
+models**. There is no usage cap and no automatic fallback; with Luna selected, an
+unreachable ChatGPT pauses matching and keeps work queued. The `job-analysis-worker`
+mounts `./radius_codex` like the app (upstream `docs/local-models.md`).
 
-The first start downloads about 3.4 GB of pinned weights into the `llm_models`
-named volume (not part of the `./hiring_scraper` backup; it is re-downloadable).
-Jobs stay "Analysing…" and out of Journey until the models have read them; jobs in
-the profile's search area go first, at roughly one posting per minute on four
-cores. Requires the Radius image with migration `0044_local_job_analysis`.
+The local models `llm` (Qwen3.5-4B, about 4.5 GB RAM) and `llm-reranker`
+(Qwen3-Reranker-0.6B, about 1.5 GB RAM) are llama.cpp servers on CPU behind the
+`local-models` compose profile, so a plain `docker compose up -d` leaves them off.
+After switching to Luna, stop running ones to free the RAM:
+
+```sh
+docker compose stop llm llm-reranker && docker compose rm -f llm llm-reranker
+```
+
+To use them, start them first and then switch in Settings:
+
+```sh
+COMPOSE_PROFILES=local-models docker compose up -d llm llm-reranker
+```
+
+They share four cores at low CPU priority (`cpu_shares: 256`), so Immich, Jellyfin
+and Nextcloud keep precedence. Override the limits with `LLM_THREADS`,
+`LLM_MEMORY_LIMIT` and `LLM_RERANKER_MEMORY_LIMIT` in `.env`. Their first start
+downloads about 3.4 GB of pinned weights into the `llm_models` named volume (not
+part of the `./hiring_scraper` backup; it is re-downloadable).
 
 Check progress:
 
