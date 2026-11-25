@@ -96,10 +96,13 @@ services:
 
   job-analysis-worker:
     <<: *worker
-    # No ChatGPT login state: this worker only talks to the database and local models.
+    # Matching uses GPT-6 Luna through the shared ChatGPT login while the subscription has
+    # headroom (Radius Settings -> Matching model), and the local llm/llm-reranker otherwise.
     volumes:
       - .env:/run/app-bootstrap.env:ro
+      - ./radius_codex:/var/lib/radius/codex
     environment:
+      RADIUS_CODEX_STATE_DIR: /var/lib/radius/codex
       SEMANTIC_EMBEDDING_URL: http://semantic-search-worker:8001/embed
       JOB_ANALYSIS_LLM_URL: http://llm:8080
       JOB_ANALYSIS_RERANK_URL: http://llm-reranker:8080

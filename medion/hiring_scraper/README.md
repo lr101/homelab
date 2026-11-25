@@ -123,9 +123,13 @@ images. Run `docker compose up -d --pull never --wait db app` with the original
 project name, then verify the old database revision and the public readiness
 endpoint.
 
-## Local job analysis models
+## Job analysis models
 
-Radius matches jobs with two local models (upstream `docs/local-models.md`):
+Radius matches jobs with GPT-6 Luna through the connected ChatGPT subscription while
+it has headroom (five-hour window below 60%, week below 70%), and with two local
+models otherwise; Radius Settings -> Matching model switches to **Local only**. The
+`job-analysis-worker` therefore mounts `./radius_codex` like the app (upstream
+`docs/local-models.md`). The local models:
 `llm` (Qwen3.5-4B, about 4.5 GB RAM) and `llm-reranker` (Qwen3-Reranker-0.6B, about
 1.5 GB RAM), both llama.cpp servers on CPU. They share four cores at low CPU
 priority (`cpu_shares: 256`), so Immich, Jellyfin and Nextcloud keep precedence;
